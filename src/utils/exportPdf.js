@@ -85,7 +85,7 @@ export function generateVisitsPdfReport(visits, summary, userName) {
       formatDuration(visit.durationHours, visit.durationMinutes),
       visit.clientCompany,
       visit.parentCompany,
-      formatINR`INR ${visit.payoutAmount}`,
+      `INR ${visit.payoutAmount}`,
       visit.visitType,
       visit.status || VISIT_STATUS.PENDING,
     ]);
