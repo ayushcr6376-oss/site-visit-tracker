@@ -40,7 +40,7 @@ export function generateVisitsPdfReport(visits, summary, userName) {
   const summaryData = [
     ['Total Site Visits', String(summary.totalVisits)],
     ['Total Hours Logged', `${summary.totalHours.toFixed(2)} hrs`],
-    ['Total Billing / Revenue', formatINR(summary.totalRevenue)],
+    ['Total Billing / Revenue', `INR ${summary.totalRevenue}`],
     ['Paid Visits', String(visits.filter((v) => v.status === VISIT_STATUS.PAID).length)],
     ['Pending Visits', String(visits.filter((v) => v.status !== VISIT_STATUS.PAID).length)],
   ];
@@ -85,7 +85,7 @@ export function generateVisitsPdfReport(visits, summary, userName) {
       formatDuration(visit.durationHours, visit.durationMinutes),
       visit.clientCompany,
       visit.parentCompany,
-      formatINR(visit.payoutAmount),
+      formatINR`INR ${visit.payoutAmount}`,
       visit.visitType,
       visit.status || VISIT_STATUS.PENDING,
     ]);
