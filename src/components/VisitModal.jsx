@@ -30,6 +30,7 @@ export default function VisitModal({ isOpen, onClose }) {
   const [errors, setErrors] = useState({});
   const [savedSignature, setSavedSignature] = useState(null);
   const [signatureSavedFlag, setSignatureSavedFlag] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const resetForm = useCallback(() => {
     setForm({ ...EMPTY_FORM, visitDate: getTodayISO() });
@@ -157,11 +158,12 @@ export default function VisitModal({ isOpen, onClose }) {
     return Object.keys(nextErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    if (!validateForm() || submitting) return;
 
-    const success = addVisit({
+    setSubmitting(true);
+    const success = await addVisit({
       visitDate: form.visitDate,
       durationHours: Number(form.durationHours),
       durationMinutes: Number(form.durationMinutes),
@@ -173,6 +175,7 @@ export default function VisitModal({ isOpen, onClose }) {
       status: form.status,
       signature: savedSignature,
     });
+    setSubmitting(false);
 
     if (success) {
       resetForm();
@@ -508,9 +511,10 @@ export default function VisitModal({ isOpen, onClose }) {
           <button
             type="submit"
             onClick={handleSubmit}
-            className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-royal-700 hover:bg-royal-800 shadow-soft transition-all active:scale-[0.99]"
+            disabled={submitting}
+            className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-royal-700 hover:bg-royal-800 shadow-soft transition-all active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Save Visit
+            {submitting ? 'Saving…' : 'Save Visit'}
           </button>
         </div>
       </div>

@@ -59,12 +59,12 @@ export default function AuthScreen() {
     return Object.keys(errors).length === 0;
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     if (!validateLoginForm()) return;
     setSubmitting(true);
-    const success = login(loginForm.email, loginForm.password);
+    const success = await login(loginForm.email, loginForm.password);
     setSubmitting(false);
     if (success) {
       setLoginForm(INITIAL_LOGIN);
@@ -72,12 +72,12 @@ export default function AuthScreen() {
     }
   };
 
-  const handleSignupSubmit = (e) => {
+  const handleSignupSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     if (!validateSignupForm()) return;
     setSubmitting(true);
-    const success = signup(
+    const success = await signup(
       signupForm.name,
       signupForm.email,
       signupForm.password,
@@ -334,7 +334,7 @@ export default function AuthScreen() {
         </div>
 
         <p className="text-center text-xs text-premium-gray-dark mt-8">
-          Secure local session · Data stored in your browser
+          Secure cloud sync · Visits saved to Supabase
         </p>
       </div>
     </div>

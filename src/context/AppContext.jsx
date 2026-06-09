@@ -7,21 +7,20 @@ import {
   useState,
 } from 'react';
 import {
-  clearAuthSession,
-  generateAuthToken,
-  getRegisteredUsers,
-  getStoredAuth,
-  saveAuthSession,
-  saveRegisteredUsers,
+  mapSessionToUser,
+  onAuthStateChange,
+  signInWithEmail,
+  signOutUser,
+  signUpWithEmail,
   validateEmail,
   validateName,
   validatePassword,
 } from '../utils/auth';
 import {
   computeSummary,
-  generateVisitId,
-  loadVisits,
-  saveVisits,
+  createVisit,
+  deleteVisitById,
+  fetchVisits,
 } from '../utils/storage';
 import { VISIT_STATUS } from '../utils/constants';
 
@@ -29,26 +28,41 @@ const AppContext = createContext(null);
 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(null);
   const [visits, setVisits] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
+  const [visitsLoading, setVisitsLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  useEffect(() => {
-    const { user: storedUser, token: storedToken } = getStoredAuth();
-    if (storedUser && storedToken) {
-      setUser(storedUser);
-      setToken(storedToken);
+  const loadUserVisits = useCallback(async (userId) => {
+    setVisitsLoading(true);
+    try {
+      const data = await fetchVisits(userId);
+      setVisits(data);
+    } catch {
+      setAuthError('Failed to load visits from cloud. Please refresh the page.');
+      setVisits([]);
+    } finally {
+      setVisitsLoading(false);
     }
-    setVisits(loadVisits());
-    setAuthLoading(false);
   }, []);
 
-  const persistVisits = useCallback((nextVisits) => {
-    saveVisits(nextVisits);
-    setVisits(nextVisits);
-  }, []);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChange((session) => {
+      const nextUser = mapSessionToUser(session);
+      setUser(nextUser);
+      setAuthLoading(false);
+
+      if (nextUser) {
+        loadUserVisits(nextUser.id);
+      } else {
+        setVisits([]);
+        setVisitsLoading(false);
+      }
+    });
+
+    return unsubscribe;
+  }, [loadUserVisits]);
 
   const summary = useMemo(() => computeSummary(visits), [visits]);
 
@@ -76,11 +90,10 @@ export function AppProvider({ children }) {
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   }, [visits, searchQuery]);
 
-  const login = useCallback((email, password) => {
+  const login = useCallback(async (email, password) => {
     setAuthError('');
-    const normalizedEmail = email.trim().toLowerCase();
 
-    if (!validateEmail(normalizedEmail)) {
+    if (!validateEmail(email)) {
       setAuthError('Please enter a valid email address.');
       return false;
     }
@@ -89,26 +102,20 @@ export function AppProvider({ children }) {
       return false;
     }
 
-    const users = getRegisteredUsers();
-    const found = users.find((u) => u.email === normalizedEmail);
-
-    if (!found) {
-      setAuthError('No account found with this email. Please sign up first.');
-      return false;
-    }
-    if (found.password !== password) {
-      setAuthError('Incorrect password. Please try again.');
+    const { user: signedInUser, error } = await signInWithEmail(email, password);
+    if (error) {
+      setAuthError(error);
       return false;
     }
 
-    const sessionToken = generateAuthToken(found.id);
-    saveAuthSession(found, sessionToken);
-    setUser(found);
-    setToken(sessionToken);
+    setUser(signedInUser);
+    if (signedInUser) {
+      await loadUserVisits(signedInUser.id);
+    }
     return true;
-  }, []);
+  }, [loadUserVisits]);
 
-  const signup = useCallback((name, email, password, confirmPassword) => {
+  const signup = useCallback(async (name, email, password, confirmPassword) => {
     setAuthError('');
     const trimmedName = name.trim();
     const normalizedEmail = email.trim().toLowerCase();
@@ -130,75 +137,79 @@ export function AppProvider({ children }) {
       return false;
     }
 
-    const users = getRegisteredUsers();
-    if (users.some((u) => u.email === normalizedEmail)) {
-      setAuthError('An account with this email already exists.');
+    const { user: newUser, error } = await signUpWithEmail(
+      trimmedName,
+      normalizedEmail,
+      password
+    );
+
+    if (error) {
+      setAuthError(error);
       return false;
     }
 
-    const newUser = {
-      id: `user_${Date.now()}`,
-      name: trimmedName,
-      email: normalizedEmail,
-      password,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedUsers = [...users, newUser];
-    saveRegisteredUsers(updatedUsers);
-
-    const sessionToken = generateAuthToken(newUser.id);
-    saveAuthSession(newUser, sessionToken);
     setUser(newUser);
-    setToken(sessionToken);
+    if (newUser) {
+      setVisits([]);
+    }
     return true;
   }, []);
 
-  const logout = useCallback(() => {
-    clearAuthSession();
+  const logout = useCallback(async () => {
+    try {
+      await signOutUser();
+    } catch {
+      setAuthError('Failed to sign out. Please try again.');
+      return;
+    }
     setUser(null);
-    setToken(null);
+    setVisits([]);
     setSearchQuery('');
     setAuthError('');
   }, []);
 
   const addVisit = useCallback(
-    (visitData) => {
-      const newVisit = {
-        id: generateVisitId(),
-        visitDate: visitData.visitDate,
-        durationHours: visitData.durationHours,
-        durationMinutes: visitData.durationMinutes,
-        clientCompany: visitData.clientCompany.trim(),
-        parentCompany: visitData.parentCompany.trim(),
-        payoutAmount: visitData.payoutAmount,
-        visitType: visitData.visitType,
-        keyTask: visitData.keyTask.trim(),
-        status: visitData.status || VISIT_STATUS.PENDING,
-        signature: visitData.signature || null,
-        createdAt: new Date().toISOString(),
-      };
-      const nextVisits = [newVisit, ...visits];
-      persistVisits(nextVisits);
-      return true;
+    async (visitData) => {
+      if (!user?.id) return false;
+
+      try {
+        const newVisit = await createVisit(user.id, {
+          visitDate: visitData.visitDate,
+          durationHours: visitData.durationHours,
+          durationMinutes: visitData.durationMinutes,
+          clientCompany: visitData.clientCompany,
+          parentCompany: visitData.parentCompany,
+          payoutAmount: visitData.payoutAmount,
+          visitType: visitData.visitType,
+          keyTask: visitData.keyTask,
+          status: visitData.status || VISIT_STATUS.PENDING,
+          signature: visitData.signature || null,
+        });
+        setVisits((prev) => [newVisit, ...prev]);
+        return true;
+      } catch {
+        setAuthError('Failed to save visit. Please try again.');
+        return false;
+      }
     },
-    [visits, persistVisits]
+    [user]
   );
 
-  const deleteVisit = useCallback(
-    (visitId) => {
-      const nextVisits = visits.filter((v) => v.id !== visitId);
-      persistVisits(nextVisits);
-    },
-    [visits, persistVisits]
-  );
+  const deleteVisit = useCallback(async (visitId) => {
+    try {
+      await deleteVisitById(visitId);
+      setVisits((prev) => prev.filter((v) => v.id !== visitId));
+    } catch {
+      setAuthError('Failed to delete visit. Please try again.');
+    }
+  }, []);
 
   const value = useMemo(
     () => ({
       user,
-      token,
-      isAuthenticated: Boolean(user && token),
+      isAuthenticated: Boolean(user),
       authLoading,
+      visitsLoading,
       authError,
       setAuthError,
       login,
@@ -214,8 +225,8 @@ export function AppProvider({ children }) {
     }),
     [
       user,
-      token,
       authLoading,
+      visitsLoading,
       authError,
       login,
       signup,

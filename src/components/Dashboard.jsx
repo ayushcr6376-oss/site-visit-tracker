@@ -13,7 +13,7 @@ export default function Dashboard() {
         <VisitHistory />
       </main>
       <footer className="py-6 text-center text-xs text-premium-gray-dark">
-        Industrial Site Visit Tracker · Local session storage
+        Industrial Site Visit Tracker · Cloud sync via Supabase
       </footer>
     </div>
   );

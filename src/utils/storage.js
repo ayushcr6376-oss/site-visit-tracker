@@ -1,22 +1,63 @@
-import { STORAGE_KEYS } from './constants';
+import { supabase } from '../lib/supabase';
 
-export function loadVisits() {
-  const raw = localStorage.getItem(STORAGE_KEYS.VISITS);
-  if (!raw) return [];
-  try {
-    const visits = JSON.parse(raw);
-    return Array.isArray(visits) ? visits : [];
-  } catch {
-    return [];
-  }
+function mapVisitFromDb(row) {
+  return {
+    id: row.id,
+    visitDate: row.visit_date,
+    durationHours: row.duration_hours,
+    durationMinutes: row.duration_minutes,
+    clientCompany: row.client_company,
+    parentCompany: row.parent_company,
+    payoutAmount: Number(row.payout_amount),
+    visitType: row.visit_type,
+    keyTask: row.key_task,
+    status: row.status,
+    signature: row.signature,
+    createdAt: row.created_at,
+  };
 }
 
-export function saveVisits(visits) {
-  localStorage.setItem(STORAGE_KEYS.VISITS, JSON.stringify(visits));
+function mapVisitToDb(userId, visitData) {
+  return {
+    user_id: userId,
+    visit_date: visitData.visitDate,
+    duration_hours: visitData.durationHours,
+    duration_minutes: visitData.durationMinutes,
+    client_company: visitData.clientCompany.trim(),
+    parent_company: visitData.parentCompany.trim(),
+    payout_amount: visitData.payoutAmount,
+    visit_type: visitData.visitType,
+    key_task: visitData.keyTask.trim(),
+    status: visitData.status,
+    signature: visitData.signature || null,
+  };
 }
 
-export function generateVisitId() {
-  return `visit_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+export async function fetchVisits(userId) {
+  const { data, error } = await supabase
+    .from('visits')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return (data || []).map(mapVisitFromDb);
+}
+
+export async function createVisit(userId, visitData) {
+  const { data, error } = await supabase
+    .from('visits')
+    .insert(mapVisitToDb(userId, visitData))
+    .select()
+    .single();
+
+  if (error) throw error;
+  return mapVisitFromDb(data);
+}
+
+export async function deleteVisitById(visitId) {
+  const { error } = await supabase.from('visits').delete().eq('id', visitId);
+  if (error) throw error;
 }
 
 export function formatINR(amount) {

@@ -1,56 +1,4 @@
-import { AUTH_TOKEN_PREFIX, STORAGE_KEYS } from './constants';
-
-export function generateAuthToken(userId) {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).slice(2, 12);
-  return `${AUTH_TOKEN_PREFIX}${userId}_${timestamp}_${random}`;
-}
-
-export function saveAuthSession(user, token) {
-  localStorage.setItem(STORAGE_KEYS.AUTH_USER, JSON.stringify(user));
-  localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
-}
-
-export function clearAuthSession() {
-  localStorage.removeItem(STORAGE_KEYS.AUTH_USER);
-  localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
-}
-
-export function getStoredAuth() {
-  const token = localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-  const userRaw = localStorage.getItem(STORAGE_KEYS.AUTH_USER);
-
-  if (!token || !userRaw) {
-    return { user: null, token: null };
-  }
-
-  try {
-    const user = JSON.parse(userRaw);
-    if (!user?.id || !user?.email || !user?.name) {
-      return { user: null, token: null };
-    }
-    if (!token.startsWith(AUTH_TOKEN_PREFIX)) {
-      return { user: null, token: null };
-    }
-    return { user, token };
-  } catch {
-    return { user: null, token: null };
-  }
-}
-
-export function getRegisteredUsers() {
-  const raw = localStorage.getItem('isvt_users');
-  if (!raw) return [];
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-export function saveRegisteredUsers(users) {
-  localStorage.setItem('isvt_users', JSON.stringify(users));
-}
+import { supabase } from '../lib/supabase';
 
 export function validateEmail(email) {
   const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -63,4 +11,97 @@ export function validatePassword(password) {
 
 export function validateName(name) {
   return name.trim().length >= 2;
+}
+
+export function mapSessionToUser(session) {
+  if (!session?.user) return null;
+
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    name:
+      session.user.user_metadata?.name ||
+      session.user.email?.split('@')[0] ||
+      'User',
+  };
+}
+
+export async function getCurrentSession() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session;
+}
+
+export async function signInWithEmail(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim().toLowerCase(),
+    password,
+  });
+
+  if (error) {
+    return { user: null, error: mapAuthError(error.message) };
+  }
+
+  return { user: mapSessionToUser(data.session), error: null };
+}
+
+export async function signUpWithEmail(name, email, password) {
+  const trimmedName = name.trim();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data, error } = await supabase.auth.signUp({
+    email: normalizedEmail,
+    password,
+    options: {
+      data: { name: trimmedName },
+    },
+  });
+
+  if (error) {
+    return { user: null, error: mapAuthError(error.message) };
+  }
+
+  if (data.user && !data.session) {
+    return {
+      user: null,
+      error:
+        'Account created. Please check your email to confirm, then sign in.',
+    };
+  }
+
+  return { user: mapSessionToUser(data.session), error: null };
+}
+
+export async function signOutUser() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+function mapAuthError(message) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes('invalid login credentials')) {
+    return 'Incorrect email or password. Please try again.';
+  }
+  if (normalized.includes('user already registered')) {
+    return 'An account with this email already exists.';
+  }
+  if (normalized.includes('email not confirmed')) {
+    return 'Please confirm your email before signing in.';
+  }
+  if (normalized.includes('password')) {
+    return 'Password must be at least 6 characters.';
+  }
+
+  return message;
+}
+
+export function onAuthStateChange(callback) {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session);
+  });
+
+  return () => subscription.unsubscribe();
 }
