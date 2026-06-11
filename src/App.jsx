@@ -1,3 +1,5 @@
+"use client";
+
 import { AppProvider, useApp } from './context/AppContext';
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
