@@ -1,0 +1,16 @@
+{
+    "short_name": "SiteTracker",
+    "name": "Site Visit Tracker",
+    "icons": [
+      {
+        "src": "favicon.svg",
+        "sizes": "any",
+        "type": "image/svg+xml"
+      }
+    ],
+    "start_url": "/",
+    "background_color": "#ffffff",
+    "theme_color": "#000000",
+    "display": "standalone",
+    "orientation": "portrait"
+  }
