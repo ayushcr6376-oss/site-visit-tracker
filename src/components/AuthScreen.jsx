@@ -1,92 +1,102 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-
-const INITIAL_LOGIN = { email: '', password: '' };
-const INITIAL_SIGNUP = {
-  name: '',
-  email: '',
-  password: '',
-  confirmPassword: '',
-};
+import { supabase } from '../utils/supabaseClient'; // Agar supabase instance alag hai toh useApp ke functions handle karenge
 
 export default function AuthScreen() {
-  const { login, signup, authError, setAuthError } = useApp();
-  const [mode, setMode] = useState('login');
-  const [loginForm, setLoginForm] = useState(INITIAL_LOGIN);
-  const [signupForm, setSignupForm] = useState(INITIAL_SIGNUP);
+  const { authError, setAuthError } = useApp();
+  const [mode, setMode] = useState('login'); // 'login' ya 'signup'
+  const [step, setStep] = useState('email'); // 'email' ya 'otp'
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [otp, setOtp] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
+    setStep('email');
     setFieldErrors({});
     setAuthError('');
-    setLoginForm(INITIAL_LOGIN);
-    setSignupForm(INITIAL_SIGNUP);
+    setMessage('');
+    setEmail('');
+    setName('');
+    setOtp('');
   };
 
-  const validateLoginForm = () => {
+  const validateEmailStep = () => {
     const errors = {};
-    if (!loginForm.email.trim()) {
-      errors.email = 'Email is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginForm.email.trim())) {
-      errors.email = 'Enter a valid email address.';
-    }
-    if (!loginForm.password) {
-      errors.password = 'Password is required.';
-    }
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  const validateSignupForm = () => {
-    const errors = {};
-    if (signupForm.name.trim().length < 2) {
+    if (mode === 'signup' && name.trim().length < 2) {
       errors.name = 'Name must be at least 2 characters.';
     }
-    if (!signupForm.email.trim()) {
+    if (!email.trim()) {
       errors.email = 'Email is required.';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(signupForm.email.trim())) {
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       errors.email = 'Enter a valid email address.';
-    }
-    if (signupForm.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters.';
-    }
-    if (signupForm.password !== signupForm.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match.';
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleLoginSubmit = async (e) => {
+  const validateOtpStep = () => {
+    const errors = {};
+    if (!otp.trim() || otp.trim().length !== 6) {
+      errors.otp = 'Enter a valid 6-digit OTP.';
+    }
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // 1. Send OTP function (Dono Login aur Signup ke liye kaam karega)
+  const handleSendOtp = async (e) => {
     e.preventDefault();
     setAuthError('');
-    if (!validateLoginForm()) return;
+    setMessage('');
+    if (!validateEmailStep()) return;
+
     setSubmitting(true);
-    const success = await login(loginForm.email, loginForm.password);
-    setSubmitting(false);
-    if (success) {
-      setLoginForm(INITIAL_LOGIN);
-      setFieldErrors({});
+    try {
+      // Supabase dynamic OTP trigger
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          // Agar naya user hai toh signup metadata mein name save hoga
+          data: mode === 'signup' ? { full_name: name.trim() } : {},
+          shouldCreateUser: mode === 'signup', // signup mein user banayega, login mein nahi agar nahi mila toh
+        },
+      });
+
+      if (error) throw error;
+
+      setMessage(`6-Digit OTP has been sent to ${email}`);
+      setStep('otp');
+    } catch (err) {
+      setAuthError(err.message || 'Failed to send OTP. Try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const handleSignupSubmit = async (e) => {
+  // 2. Verify OTP function
+  const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setAuthError('');
-    if (!validateSignupForm()) return;
+    if (!validateOtpStep()) return;
+
     setSubmitting(true);
-    const success = await signup(
-      signupForm.name,
-      signupForm.email,
-      signupForm.password,
-      signupForm.confirmPassword
-    );
-    setSubmitting(false);
-    if (success) {
-      setSignupForm(INITIAL_SIGNUP);
-      setFieldErrors({});
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: otp.trim(),
+        type: 'email',
+      });
+
+      if (error) throw error;
+      // Verification success hote hi Supabase Auth State auto trigger ho jayegi aur app dashboard khul jayega
+    } catch (err) {
+      setAuthError(err.message || 'Invalid OTP. Please check again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -95,19 +105,8 @@ export default function AuthScreen() {
       <div className="w-full max-w-md">
         <div className="text-center mb-10">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-royal-700 shadow-card mb-5">
-            <svg
-              className="w-7 h-7 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.75}
-              aria-hidden
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"
-              />
+            <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6" />
             </svg>
           </div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-royal-800 tracking-tight">
@@ -119,222 +118,130 @@ export default function AuthScreen() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-card border border-white/80 p-8 sm:p-10 transition-all duration-300">
-          <div className="flex rounded-xl bg-premium-gray p-1 mb-8">
-            <button
-              type="button"
-              onClick={() => switchMode('login')}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                mode === 'login'
-                  ? 'bg-white text-royal-700 shadow-soft'
-                  : 'text-premium-gray-dark hover:text-royal-700'
-              }`}
-            >
-              Login
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('signup')}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                mode === 'signup'
-                  ? 'bg-white text-royal-700 shadow-soft'
-                  : 'text-premium-gray-dark hover:text-royal-700'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
+          {/* Tab switching tabs tab tak dikhenge jab tak step email par hai */}
+          {step === 'email' && (
+            <div className="flex rounded-xl bg-premium-gray p-1 mb-8">
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  mode === 'login' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
+                }`}
+              >
+                OTP Login
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('signup')}
+                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  mode === 'signup' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
+                }`}
+              >
+                Register
+              </button>
+            </div>
+          )}
 
           {authError && (
-            <div
-              role="alert"
-              className="mb-6 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm"
-            >
+            <div role="alert" className="mb-6 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm font-medium">
               {authError}
             </div>
           )}
 
-          {mode === 'login' ? (
-            <form onSubmit={handleLoginSubmit} className="space-y-5" noValidate>
+          {message && (
+            <div role="alert" className="mb-6 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm font-medium">
+              {message}
+            </div>
+          )}
+
+          {step === 'email' ? (
+            <form onSubmit={handleSendOtp} className="space-y-5" noValidate>
+              {mode === 'signup' && (
+                <div>
+                  <label htmlFor="signup-name" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+                    Full Name
+                  </label>
+                  <input
+                    id="signup-name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
+                      fieldErrors.name ? 'border-red-500' : 'border-transparent'
+                    }`}
+                    placeholder="Alex Morgan"
+                  />
+                  {fieldErrors.name && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.name}</p>}
+                </div>
+              )}
+
               <div>
-                <label
-                  htmlFor="login-email"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Email
+                <label htmlFor="auth-email" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+                  Email Address
                 </label>
                 <input
-                  id="login-email"
+                  id="auth-email"
                   type="email"
-                  autoComplete="email"
-                  value={loginForm.email}
-                  onChange={(e) =>
-                    setLoginForm((prev) => ({ ...prev, email: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.email ? 'border-red-300' : 'border-transparent'
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
+                    fieldErrors.email ? 'border-red-500' : 'border-transparent'
                   }`}
                   placeholder="you@company.com"
                 />
-                {fieldErrors.email && (
-                  <p className="mt-1.5 text-xs text-red-600">{fieldErrors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="login-password"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Password
-                </label>
-                <input
-                  id="login-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={loginForm.password}
-                  onChange={(e) =>
-                    setLoginForm((prev) => ({ ...prev, password: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.password ? 'border-red-300' : 'border-transparent'
-                  }`}
-                  placeholder="••••••••"
-                />
-                {fieldErrors.password && (
-                  <p className="mt-1.5 text-xs text-red-600">{fieldErrors.password}</p>
-                )}
+                {fieldErrors.email && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.email}</p>}
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Signing in…' : 'Sign In'}
+                {submitting ? 'Sending OTP…' : 'Get 6-Digit OTP'}
               </button>
             </form>
           ) : (
-            <form onSubmit={handleSignupSubmit} className="space-y-5" noValidate>
+            <form onSubmit={handleVerifyOtp} className="space-y-5" noValidate>
               <div>
-                <label
-                  htmlFor="signup-name"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Full Name
+                <label htmlFor="auth-otp" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+                  Enter 6-Digit OTP
                 </label>
                 <input
-                  id="signup-name"
+                  id="auth-otp"
                   type="text"
-                  autoComplete="name"
-                  value={signupForm.name}
-                  onChange={(e) =>
-                    setSignupForm((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.name ? 'border-red-300' : 'border-transparent'
+                  maxLength={6}
+                  pattern="\d*"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} // Sirf numbers allow karega
+                  className={`w-full text-center tracking-[0.5em] text-lg font-bold px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
+                    fieldErrors.otp ? 'border-red-500' : 'border-transparent'
                   }`}
-                  placeholder="Alex Morgan"
+                  placeholder="000000"
                 />
-                {fieldErrors.name && (
-                  <p className="mt-1.5 text-xs text-red-600">{fieldErrors.name}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="signup-email"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Email
-                </label>
-                <input
-                  id="signup-email"
-                  type="email"
-                  autoComplete="email"
-                  value={signupForm.email}
-                  onChange={(e) =>
-                    setSignupForm((prev) => ({ ...prev, email: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.email ? 'border-red-300' : 'border-transparent'
-                  }`}
-                  placeholder="you@company.com"
-                />
-                {fieldErrors.email && (
-                  <p className="mt-1.5 text-xs text-red-600">{fieldErrors.email}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="signup-password"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Password
-                </label>
-                <input
-                  id="signup-password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={signupForm.password}
-                  onChange={(e) =>
-                    setSignupForm((prev) => ({ ...prev, password: e.target.value }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.password ? 'border-red-300' : 'border-transparent'
-                  }`}
-                  placeholder="Min. 6 characters"
-                />
-                {fieldErrors.password && (
-                  <p className="mt-1.5 text-xs text-red-600">{fieldErrors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="signup-confirm"
-                  className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2"
-                >
-                  Confirm Password
-                </label>
-                <input
-                  id="signup-confirm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={signupForm.confirmPassword}
-                  onChange={(e) =>
-                    setSignupForm((prev) => ({
-                      ...prev,
-                      confirmPassword: e.target.value,
-                    }))
-                  }
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all duration-200 focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.confirmPassword
-                      ? 'border-red-300'
-                      : 'border-transparent'
-                  }`}
-                  placeholder="Repeat password"
-                />
-                {fieldErrors.confirmPassword && (
-                  <p className="mt-1.5 text-xs text-red-600">
-                    {fieldErrors.confirmPassword}
-                  </p>
-                )}
+                {fieldErrors.otp && <p className="mt-1.5 text-center text-xs text-red-600 font-medium">{fieldErrors.otp}</p>}
               </div>
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold shadow-soft hover:bg-emerald-700 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Creating account…' : 'Create Account'}
+                {submitting ? 'Verifying…' : 'Verify & Login'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep('email')}
+                className="w-full text-center text-xs font-medium text-royal-600 hover:text-royal-700 transition-colors mt-2"
+              >
+                ← Change Email Address
               </button>
             </form>
           )}
         </div>
 
         <p className="text-center text-xs text-premium-gray-dark mt-8">
-          Secure cloud sync · Visits saved to Supabase
+          Secure OTP system · No passwords needed
         </p>
       </div>
     </div>
