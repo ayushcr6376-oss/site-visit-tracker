@@ -110,8 +110,7 @@ export default function VisitModal({ isOpen, onClose }) {
     }
 
     const hours = form.durationHours === '' ? NaN : Number(form.durationHours);
-    const minutes =
-      form.durationMinutes === '' ? NaN : Number(form.durationMinutes);
+    const minutes = form.durationMinutes === '' ? NaN : Number(form.durationMinutes);
 
     if (
       Number.isNaN(hours) ||
@@ -147,7 +146,7 @@ export default function VisitModal({ isOpen, onClose }) {
     if (!form.keyTask.trim()) {
       nextErrors.keyTask = 'Key task performed is required.';
     } else if (form.keyTask.trim().length < 10) {
-      nextErrors.keyTask = 'Please provide at least 10 characters.';
+      nextErrors.keyTask = 'Please provide at least 10 characters description.';
     }
 
     if (!savedSignature) {
@@ -167,11 +166,11 @@ export default function VisitModal({ isOpen, onClose }) {
       visitDate: form.visitDate,
       durationHours: Number(form.durationHours),
       durationMinutes: Number(form.durationMinutes),
-      clientCompany: form.clientCompany,
-      parentCompany: form.parentCompany,
+      clientCompany: form.clientCompany.trim(),
+      parentCompany: form.parentCompany.trim(),
       payoutAmount: Number(form.payoutAmount),
       visitType: form.visitType,
-      keyTask: form.keyTask,
+      keyTask: form.keyTask.trim(),
       status: form.status,
       signature: savedSignature,
     });
@@ -243,11 +242,11 @@ export default function VisitModal({ isOpen, onClose }) {
               max={getTodayISO()}
               onChange={(e) => updateField('visitDate', e.target.value)}
               className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                errors.visitDate ? 'border-red-300' : 'border-transparent'
+                errors.visitDate ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
               }`}
             />
             {errors.visitDate && (
-              <p className="mt-1.5 text-xs text-red-600">{errors.visitDate}</p>
+              <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.visitDate}</p>
             )}
           </div>
 
@@ -269,7 +268,7 @@ export default function VisitModal({ isOpen, onClose }) {
                   value={form.durationHours}
                   onChange={(e) => updateField('durationHours', e.target.value)}
                   className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    errors.duration ? 'border-red-300' : 'border-transparent'
+                    errors.duration ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
                   }`}
                 />
               </div>
@@ -287,13 +286,13 @@ export default function VisitModal({ isOpen, onClose }) {
                   value={form.durationMinutes}
                   onChange={(e) => updateField('durationMinutes', e.target.value)}
                   className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    errors.duration ? 'border-red-300' : 'border-transparent'
+                    errors.duration ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
                   }`}
                 />
               </div>
             </div>
             {errors.duration && (
-              <p className="mt-1.5 text-xs text-red-600">{errors.duration}</p>
+              <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.duration}</p>
             )}
           </div>
 
@@ -311,12 +310,12 @@ export default function VisitModal({ isOpen, onClose }) {
                 value={form.clientCompany}
                 onChange={(e) => updateField('clientCompany', e.target.value)}
                 className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                  errors.clientCompany ? 'border-red-300' : 'border-transparent'
+                  errors.clientCompany ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
                 }`}
                 placeholder="Acme Industries Ltd."
               />
               {errors.clientCompany && (
-                <p className="mt-1.5 text-xs text-red-600">{errors.clientCompany}</p>
+                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.clientCompany}</p>
               )}
             </div>
             <div>
@@ -332,12 +331,12 @@ export default function VisitModal({ isOpen, onClose }) {
                 value={form.parentCompany}
                 onChange={(e) => updateField('parentCompany', e.target.value)}
                 className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                  errors.parentCompany ? 'border-red-300' : 'border-transparent'
+                  errors.parentCompany ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
                 }`}
                 placeholder="Global Vendor Corp."
               />
               {errors.parentCompany && (
-                <p className="mt-1.5 text-xs text-red-600">{errors.parentCompany}</p>
+                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.parentCompany}</p>
               )}
             </div>
           </div>
@@ -358,12 +357,12 @@ export default function VisitModal({ isOpen, onClose }) {
                 value={form.payoutAmount}
                 onChange={(e) => updateField('payoutAmount', e.target.value)}
                 className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                  errors.payoutAmount ? 'border-red-300' : 'border-transparent'
+                  errors.payoutAmount ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
                 }`}
                 placeholder="0.00"
               />
               {errors.payoutAmount && (
-                <p className="mt-1.5 text-xs text-red-600">{errors.payoutAmount}</p>
+                <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.payoutAmount}</p>
               )}
             </div>
             <div>
@@ -373,18 +372,20 @@ export default function VisitModal({ isOpen, onClose }) {
               >
                 Visit Type
               </label>
-              <select
-                id="visit-type"
-                value={form.visitType}
-                onChange={(e) => updateField('visitType', e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-transparent bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 appearance-none cursor-pointer"
-              >
-                {VISIT_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  id="visit-type"
+                  value={form.visitType}
+                  onChange={(e) => updateField('visitType', e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-transparent bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 appearance-none cursor-pointer"
+                >
+                  {VISIT_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -401,12 +402,12 @@ export default function VisitModal({ isOpen, onClose }) {
               value={form.keyTask}
               onChange={(e) => updateField('keyTask', e.target.value)}
               className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm resize-none focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                errors.keyTask ? 'border-red-300' : 'border-transparent'
+                errors.keyTask ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
               }`}
               placeholder="Describe inspections, installations, or consultations performed…"
             />
             {errors.keyTask && (
-              <p className="mt-1.5 text-xs text-red-600">{errors.keyTask}</p>
+              <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.keyTask}</p>
             )}
           </div>
 
@@ -495,7 +496,7 @@ export default function VisitModal({ isOpen, onClose }) {
               </div>
             )}
             {errors.signature && (
-              <p className="mt-1.5 text-xs text-red-600">{errors.signature}</p>
+              <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.signature}</p>
             )}
           </div>
         </form>
