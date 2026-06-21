@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../utils/supabaseClient'; // Agar supabase instance alag hai toh useApp ke functions handle karenge
+import supabase from '../utils/supabaseClient'; // Agar supabase instance alag hai toh useApp ke functions handle karenge
 
 export default function AuthScreen() {
   const { authError, setAuthError } = useApp();
