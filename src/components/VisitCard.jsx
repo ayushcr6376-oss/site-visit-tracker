@@ -18,7 +18,7 @@ export default function VisitCard({ visit, onDelete }) {
     }
   };
 
-  // Single PDF Generate karne ka premium function (Matches your exact fields!)
+  // Single PDF Generate karne ka premium function (Fixed & Working!)
   const handleDownloadSinglePDF = () => {
     try {
       const doc = new jsPDF();
@@ -32,8 +32,8 @@ export default function VisitCard({ visit, onDelete }) {
       doc.setFontSize(20);
       doc.text('INDUSTRIAL SITE VISIT REPORT', 15, 25);
       
-      // Bottom Footer Line
-      doc.setDrawColor(226, 232, Slate = 240);
+      // Bottom Footer Line (FIXED HERE - Replaced 'Slate = 240' with clean color codes)
+      doc.setDrawColor(226, 232, 240);
       doc.line(15, 275, 195, 275);
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
@@ -132,7 +132,6 @@ export default function VisitCard({ visit, onDelete }) {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* Mast Naya Single PDF Button */}
           <button
             type="button"
             onClick={handleDownloadSinglePDF}
