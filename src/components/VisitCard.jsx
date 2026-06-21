@@ -59,7 +59,7 @@ export default function VisitCard({ visit, onDelete }) {
       addRow('Visit Type', visit.visitType || 'N/A');
       addRow('Duration', formatDuration(visit.durationHours, visit.durationMinutes));
       addRow('Status', visit.status || VISIT_STATUS.PENDING);
-      addRow('Payout Amount', formatINR(visit.payoutAmount || 0));
+      addRow('Payout Amount', visit.payoutAmount ? `INR ${Number(visit.payoutAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'INR 0.00');
 
       // Key Task Box
       currentY += 5;
