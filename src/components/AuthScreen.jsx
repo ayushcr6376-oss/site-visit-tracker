@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import supabase from '../utils/supabaseClient'; // Agar supabase instance alag hai toh useApp ke functions handle karenge
+import supabase from '../utils/supabaseClient';
 
 export default function AuthScreen() {
   const { authError, setAuthError } = useApp();
@@ -47,7 +47,7 @@ export default function AuthScreen() {
     return Object.keys(errors).length === 0;
   };
 
-  // 1. Send OTP function (Dono Login aur Signup ke liye kaam karega)
+  // 1. Send OTP function
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -56,22 +56,21 @@ export default function AuthScreen() {
 
     setSubmitting(true);
     try {
-      // Supabase dynamic OTP trigger
+      // Is code se Supabase strictly link bhejkar direct login karne ke bajae OTP trigger karega
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          // Agar naya user hai toh signup metadata mein name save hoga
           data: mode === 'signup' ? { full_name: name.trim() } : {},
-          shouldCreateUser: mode === 'signup', // signup mein user banayega, login mein nahi agar nahi mila toh
+          shouldCreateUser: mode === 'signup',
         },
       });
 
       if (error) throw error;
 
-      setMessage(`6-Digit OTP has been sent to ${email}`);
+      setMessage(`6-Digit OTP request initialized for ${email}. Please check your email inbox.`);
       setStep('otp');
     } catch (err) {
-      setAuthError(err.message || 'Failed to send OTP. Try again.');
+      setAuthError(err.message || 'Failed to initialize login. Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -85,16 +84,17 @@ export default function AuthScreen() {
 
     setSubmitting(true);
     try {
+      // Yahan hum explicitly token_type ko 'magiclink' se override kar rahe hain taaki agar token email par link ke roop mein bhi gaya ho toh 6-digit code backend verify karle
       const { error } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token: otp.trim(),
-        type: 'email',
+        type: 'magiclink', // Supabase ke email template token ke sath handle karne ke liye
       });
 
       if (error) throw error;
-      // Verification success hote hi Supabase Auth State auto trigger ho jayegi aur app dashboard khul jayega
+      // Success par auto login ho jayega
     } catch (err) {
-      setAuthError(err.message || 'Invalid OTP. Please check again.');
+      setAuthError(err.message || 'Invalid verification code. Please check your email again.');
     } finally {
       setSubmitting(false);
     }
@@ -118,7 +118,6 @@ export default function AuthScreen() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-card border border-white/80 p-8 sm:p-10 transition-all duration-300">
-          {/* Tab switching tabs tab tak dikhenge jab tak step email par hai */}
           {step === 'email' && (
             <div className="flex rounded-xl bg-premium-gray p-1 mb-8">
               <button
@@ -197,14 +196,14 @@ export default function AuthScreen() {
                 disabled={submitting}
                 className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Sending OTP…' : 'Get 6-Digit OTP'}
+                {submitting ? 'Sending Request…' : 'Get 6-Digit OTP'}
               </button>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-5" noValidate>
               <div>
                 <label htmlFor="auth-otp" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
-                  Enter 6-Digit OTP
+                  Enter 6-Digit Verification Token
                 </label>
                 <input
                   id="auth-otp"
@@ -212,7 +211,7 @@ export default function AuthScreen() {
                   maxLength={6}
                   pattern="\d*"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))} // Sirf numbers allow karega
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   className={`w-full text-center tracking-[0.5em] text-lg font-bold px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
                     fieldErrors.otp ? 'border-red-500' : 'border-transparent'
                   }`}
@@ -226,7 +225,7 @@ export default function AuthScreen() {
                 disabled={submitting}
                 className="w-full py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold shadow-soft hover:bg-emerald-700 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Verifying…' : 'Verify & Login'}
+                {submitting ? 'Verifying Code…' : 'Verify & Login'}
               </button>
 
               <button
