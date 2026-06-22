@@ -5,26 +5,22 @@ import supabase from '../utils/supabaseClient';
 export default function AuthScreen() {
   const { authError, setAuthError } = useApp();
   const [mode, setMode] = useState('login'); // 'login' ya 'signup'
-  const [step, setStep] = useState('email'); // 'email' ya 'otp'
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
-  const [otp, setOtp] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
 
   const switchMode = (nextMode) => {
     setMode(nextMode);
-    setStep('email');
     setFieldErrors({});
     setAuthError('');
     setMessage('');
     setEmail('');
     setName('');
-    setOtp('');
   };
 
-  const validateEmailStep = () => {
+  const validateStep = () => {
     const errors = {};
     if (mode === 'signup' && name.trim().length < 2) {
       errors.name = 'Name must be at least 2 characters.';
@@ -38,63 +34,30 @@ export default function AuthScreen() {
     return Object.keys(errors).length === 0;
   };
 
-  const validateOtpStep = () => {
-    const errors = {};
-    if (!otp.trim() || otp.trim().length !== 6) {
-      errors.otp = 'Enter a valid 6-digit OTP.';
-    }
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  // 1. Send OTP function
-  const handleSendOtp = async (e) => {
+  const handleAuthSubmit = async (e) => {
     e.preventDefault();
     setAuthError('');
     setMessage('');
-    if (!validateEmailStep()) return;
+    if (!validateStep()) return;
 
     setSubmitting(true);
     try {
-      // Is code se Supabase strictly link bhejkar direct login karne ke bajae OTP trigger karega
+      // Supabase Magic Link Authentication trigger karega
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
           data: mode === 'signup' ? { full_name: name.trim() } : {},
           shouldCreateUser: mode === 'signup',
+          // Vercel par sahi se redirect hone ke liye window location use karenge
+          emailRedirectTo: window.location.origin, 
         },
       });
 
       if (error) throw error;
 
-      setMessage(`6-Digit OTP request initialized for ${email}. Please check your email inbox.`);
-      setStep('otp');
+      setMessage(`✨ Verification link has been sent to ${email}! Please check your email inbox and click the link to login.`);
     } catch (err) {
-      setAuthError(err.message || 'Failed to initialize login. Try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // 2. Verify OTP function
-  const handleVerifyOtp = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    if (!validateOtpStep()) return;
-
-    setSubmitting(true);
-    try {
-      // Yahan hum explicitly token_type ko 'magiclink' se override kar rahe hain taaki agar token email par link ke roop mein bhi gaya ho toh 6-digit code backend verify karle
-      const { error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otp.trim(),
-        type: 'magiclink', // Supabase ke email template token ke sath handle karne ke liye
-      });
-
-      if (error) throw error;
-      // Success par auto login ho jayega
-    } catch (err) {
-      setAuthError(err.message || 'Invalid verification code. Please check your email again.');
+      setAuthError(err.message || 'Authentication failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -118,28 +81,26 @@ export default function AuthScreen() {
         </div>
 
         <div className="bg-white rounded-3xl shadow-card border border-white/80 p-8 sm:p-10 transition-all duration-300">
-          {step === 'email' && (
-            <div className="flex rounded-xl bg-premium-gray p-1 mb-8">
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  mode === 'login' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
-                }`}
-              >
-                OTP Login
-              </button>
-              <button
-                type="button"
-                onClick={() => switchMode('signup')}
-                className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                  mode === 'signup' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
-                }`}
-              >
-                Register
-              </button>
-            </div>
-          )}
+          <div className="flex rounded-xl bg-premium-gray p-1 mb-8">
+            <button
+              type="button"
+              onClick={() => switchMode('login')}
+              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                mode === 'login' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
+              }`}
+            >
+              Magic Link Login
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode('signup')}
+              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 ${
+                mode === 'signup' ? 'bg-white text-royal-700 shadow-soft' : 'text-premium-gray-dark hover:text-royal-700'
+              }`}
+            >
+              Register
+            </button>
+          </div>
 
           {authError && (
             <div role="alert" className="mb-6 px-4 py-3 rounded-xl bg-red-50 border border-red-100 text-red-700 text-sm font-medium">
@@ -153,94 +114,55 @@ export default function AuthScreen() {
             </div>
           )}
 
-          {step === 'email' ? (
-            <form onSubmit={handleSendOtp} className="space-y-5" noValidate>
-              {mode === 'signup' && (
-                <div>
-                  <label htmlFor="signup-name" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
-                    Full Name
-                  </label>
-                  <input
-                    id="signup-name"
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                      fieldErrors.name ? 'border-red-500' : 'border-transparent'
-                    }`}
-                    placeholder="Alex Morgan"
-                  />
-                  {fieldErrors.name && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.name}</p>}
-                </div>
-              )}
-
+          <form onSubmit={handleAuthSubmit} className="space-y-5" noValidate>
+            {mode === 'signup' && (
               <div>
-                <label htmlFor="auth-email" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
-                  Email Address
+                <label htmlFor="signup-name" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+                  Full Name
                 </label>
                 <input
-                  id="auth-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.email ? 'border-red-500' : 'border-transparent'
-                  }`}
-                  placeholder="you@company.com"
-                />
-                {fieldErrors.email && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.email}</p>}
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Sending Request…' : 'Get 6-Digit OTP'}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-5" noValidate>
-              <div>
-                <label htmlFor="auth-otp" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
-                  Enter 6-Digit Verification Token
-                </label>
-                <input
-                  id="auth-otp"
+                  id="signup-name"
                   type="text"
-                  maxLength={6}
-                  pattern="\d*"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                  className={`w-full text-center tracking-[0.5em] text-lg font-bold px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    fieldErrors.otp ? 'border-red-500' : 'border-transparent'
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
+                    fieldErrors.name ? 'border-red-500' : 'border-transparent'
                   }`}
-                  placeholder="000000"
+                  placeholder="Alex Morgan"
                 />
-                {fieldErrors.otp && <p className="mt-1.5 text-center text-xs text-red-600 font-medium">{fieldErrors.otp}</p>}
+                {fieldErrors.name && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.name}</p>}
               </div>
+            )}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full py-3.5 rounded-xl bg-emerald-600 text-white text-sm font-semibold shadow-soft hover:bg-emerald-700 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Verifying Code…' : 'Verify & Login'}
-              </button>
+            <div>
+              <label htmlFor="auth-email" className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
+                Email Address
+              </label>
+              <input
+                id="auth-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-slate-800 text-sm transition-all focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
+                  fieldErrors.email ? 'border-red-500' : 'border-transparent'
+                }`}
+                placeholder="you@company.com"
+              />
+              {fieldErrors.email && <p className="mt-1.5 text-xs text-red-600 font-medium">{fieldErrors.email}</p>}
+            </div>
 
-              <button
-                type="button"
-                onClick={() => setStep('email')}
-                className="w-full text-center text-xs font-medium text-royal-600 hover:text-royal-700 transition-colors mt-2"
-              >
-                ← Change Email Address
-              </button>
-            </form>
-          )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full py-3.5 mt-2 rounded-xl bg-royal-700 text-white text-sm font-semibold shadow-soft hover:bg-royal-800 active:scale-[0.99] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {submitting ? 'Sending Link…' : mode === 'signup' ? 'Register via Link' : 'Get Magic Login Link'}
+            </button>
+          </form>
         </div>
 
         <p className="text-center text-xs text-premium-gray-dark mt-8">
-          Secure OTP system · No passwords needed
+          Passwordless Secure Authentication · Supabase Verified
         </p>
       </div>
     </div>
