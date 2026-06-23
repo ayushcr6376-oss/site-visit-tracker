@@ -4,8 +4,8 @@ import supabase from '../utils/supabaseClient';
 
 export default function AuthScreen() {
   const { authError, setAuthError } = useApp();
-  const [mode, setMode] = useState('login'); 
-  const [step, setStep] = useState('email'); 
+  const [mode, setMode] = useState('login'); // 'login' ya 'signup'
+  const [step, setStep] = useState('email'); // 'email' ya 'otp'
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [otp, setOtp] = useState('');
@@ -47,6 +47,7 @@ export default function AuthScreen() {
     return Object.keys(errors).length === 0;
   };
 
+  // 1. Send OTP (Signup aur Login dono ke liye signInWithOtp use hoga)
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -55,11 +56,13 @@ export default function AuthScreen() {
 
     setSubmitting(true);
     try {
+      // Supabase Email OTP ke liye signup aur login dono mein signInWithOtp hi call hota hai
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
+          // Agar naya user register ho raha hai, toh uska naam metadata mein bhejenge
           data: mode === 'signup' ? { full_name: name.trim() } : {},
-          shouldCreateUser: mode === 'signup',
+          shouldCreateUser: true, // Yeh naye users ko automatically register hone dega
         },
       });
 
@@ -74,6 +77,7 @@ export default function AuthScreen() {
     }
   };
 
+  // 2. Verify OTP
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -84,17 +88,10 @@ export default function AuthScreen() {
       const { error } = await supabase.auth.verifyOtp({
         email: email.trim(),
         token: otp.trim(),
-        type: mode === 'signup' ? 'signup' : 'email',
+        type: 'email', // Standard Email OTP type
       });
 
-      if (error) {
-        const { error: loginError } = await supabase.auth.verifyOtp({
-          email: email.trim(),
-          token: otp.trim(),
-          type: 'magiclink',
-        });
-        if (loginError) throw loginError;
-      }
+      if (error) throw error;
     } catch (err) {
       setAuthError(err.message || 'Invalid OTP. Please check again.');
     } finally {
