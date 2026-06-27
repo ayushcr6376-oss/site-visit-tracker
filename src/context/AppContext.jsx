@@ -38,7 +38,7 @@ export function AppProvider({ children }) {
     setVisitsLoading(true);
     try {
       const data = await fetchVisits(userId);
-      setVisits(data);
+      setVisits(data || []);
     } catch {
       setAuthError('Failed to load visits from cloud. Please refresh the page.');
       setVisits([]);
@@ -66,28 +66,28 @@ export function AppProvider({ children }) {
 
   const summary = useMemo(() => computeSummary(visits), [visits]);
 
+  // Master sorted and filtered visits log
   const filteredVisits = useMemo(() => {
+    const sortedRaw = [...visits].sort(
+      (a, b) => new Date(b.createdAt || b.visitDate).getTime() - new Date(a.createdAt || a.visitDate).getTime()
+    );
+
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return [...visits].sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
-    }
-    return visits
-      .filter((visit) => {
-        const haystack = [
-          visit.clientCompany,
-          visit.parentCompany,
-          visit.visitType,
-          visit.keyTask,
-          visit.status,
-          visit.visitDate,
-        ]
-          .join(' ')
-          .toLowerCase();
-        return haystack.includes(query);
-      })
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!query) return sortedRaw;
+
+    return sortedRaw.filter((visit) => {
+      const haystack = [
+        visit.clientCompany,
+        visit.parentCompany,
+        visit.visitType,
+        visit.keyTask,
+        visit.status,
+        visit.visitDate,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
   }, [visits, searchQuery]);
 
   const login = useCallback(async (email, password) => {
@@ -195,12 +195,20 @@ export function AppProvider({ children }) {
     [user]
   );
 
+  // Robust and solid delete function with state sync
   const deleteVisit = useCallback(async (visitId) => {
+    if (!visitId) return;
+    
     try {
+      // First delete from cloud database permanently
       await deleteVisitById(visitId);
+      
+      // If db call succeeds, filter it out from state immediately
       setVisits((prev) => prev.filter((v) => v.id !== visitId));
-    } catch {
-      setAuthError('Failed to delete visit. Please try again.');
+      setAuthError('');
+    } catch (err) {
+      console.error("Delete failed:", err);
+      setAuthError('Failed to delete visit from cloud database. Please try again.');
     }
   }, []);
 
@@ -216,7 +224,7 @@ export function AppProvider({ children }) {
       signup,
       logout,
       visits,
-      filteredVisits,
+      filteredVisits, // Main components use this to list records dynamically
       summary,
       searchQuery,
       setSearchQuery,
