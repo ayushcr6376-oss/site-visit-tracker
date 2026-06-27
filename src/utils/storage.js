@@ -55,9 +55,27 @@ export async function createVisit(userId, visitData) {
   return mapVisitFromDb(data);
 }
 
+// Fixed delete logic with strict user verification block
 export async function deleteVisitById(visitId) {
-  const { error } = await supabase.from('visits').delete().eq('id', visitId);
-  if (error) throw error;
+  // Fetching active user session dynamically to prevent silent RLS failures
+  const { data: { session } } = await supabase.auth.getSession();
+  const userId = session?.user?.id;
+
+  if (!userId) {
+    throw new Error('Unauthorized delete request: No active session found.');
+  }
+
+  // Double check query by both id and current user_id for strict database security
+  const { error } = await supabase
+    .from('visits')
+    .delete()
+    .eq('id', visitId)
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error("Supabase storage delete query error:", error);
+    throw error;
+  }
 }
 
 export function formatINR(amount) {
