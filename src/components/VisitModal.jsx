@@ -5,8 +5,12 @@ import { VISIT_STATUS, VISIT_TYPES } from '../utils/constants';
 
 const EMPTY_FORM = {
   visitDate: '',
-  durationHours: '',
-  durationMinutes: '',
+  inHour: '09',
+  inMinute: '00',
+  inPeriod: 'AM',
+  outHour: '06',
+  outMinute: '00',
+  outPeriod: 'PM',
   clientCompany: '',
   parentCompany: '',
   payoutAmount: '',
@@ -15,12 +19,40 @@ const EMPTY_FORM = {
   status: VISIT_STATUS.PENDING,
 };
 
+const HOURS_OPTIONS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+const MINUTES_OPTIONS = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
+
 function getTodayISO() {
   const d = new Date();
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+// Helper function to calculate total dynamic hours & minutes
+function calculateDuration(inH, inM, inP, outH, outM, outP) {
+  let inHours24 = Number(inH);
+  if (inP === 'PM' && inHours24 !== 12) inHours24 += 12;
+  if (inP === 'AM' && inHours24 === 12) inHours24 = 0;
+
+  let outHours24 = Number(outH);
+  if (outP === 'PM' && outHours24 !== 12) outHours24 += 12;
+  if (outP === 'AM' && outHours24 === 12) outHours24 = 0;
+
+  let inTotalMinutes = inHours24 * 60 + Number(inM);
+  let outTotalMinutes = outHours24 * 60 + Number(outM);
+
+  // Night shift logic: if out time is less than in time, it means it's the next day
+  if (outTotalMinutes < inTotalMinutes) {
+    outTotalMinutes += 24 * 60;
+  }
+
+  const diffMinutes = outTotalMinutes - inTotalMinutes;
+  const hours = Math.floor(diffMinutes / 60);
+  const minutes = diffMinutes % 60;
+
+  return { hours, minutes };
 }
 
 export default function VisitModal({ isOpen, onClose }) {
@@ -31,6 +63,12 @@ export default function VisitModal({ isOpen, onClose }) {
   const [savedSignature, setSavedSignature] = useState(null);
   const [signatureSavedFlag, setSignatureSavedFlag] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Live duration calculation based on selections
+  const { hours: calculatedHours, minutes: calculatedMinutes } = calculateDuration(
+    form.inHour, form.inMinute, form.inPeriod,
+    form.outHour, form.outMinute, form.outPeriod
+  );
 
   const resetForm = useCallback(() => {
     setForm({ ...EMPTY_FORM, visitDate: getTodayISO() });
@@ -65,6 +103,7 @@ export default function VisitModal({ isOpen, onClose }) {
     setErrors((prev) => {
       const next = { ...prev };
       delete next[field];
+      delete next.duration; // Clear duration error when time segments are clicked
       return next;
     });
   };
@@ -109,21 +148,8 @@ export default function VisitModal({ isOpen, onClose }) {
       nextErrors.visitDate = 'Date of visit is required.';
     }
 
-    const hours = form.durationHours === '' ? NaN : Number(form.durationHours);
-    const minutes = form.durationMinutes === '' ? NaN : Number(form.durationMinutes);
-
-    if (
-      Number.isNaN(hours) ||
-      Number.isNaN(minutes) ||
-      hours < 0 ||
-      minutes < 0 ||
-      minutes > 59
-    ) {
-      nextErrors.duration = 'Enter valid hours (≥0) and minutes (0–59).';
-    } else if (hours === 0 && minutes === 0) {
-      nextErrors.duration = 'Duration must be greater than zero.';
-    } else if (!Number.isInteger(hours) || !Number.isInteger(minutes)) {
-      nextErrors.duration = 'Hours and minutes must be whole numbers.';
+    if (calculatedHours === 0 && calculatedMinutes === 0) {
+      nextErrors.duration = 'IN Time and OUT Time cannot be exactly the same.';
     }
 
     if (!form.clientCompany.trim()) {
@@ -162,15 +188,20 @@ export default function VisitModal({ isOpen, onClose }) {
     if (!validateForm() || submitting) return;
 
     setSubmitting(true);
+    
+    // Formatting strings for Database so it records time stamps beautifully
+    const inTimeFormatted = `${form.inHour}:${form.inMinute} ${form.inPeriod}`;
+    const outTimeFormatted = `${form.outHour}:${form.outMinute} ${form.outPeriod}`;
+
     const success = await addVisit({
       visitDate: form.visitDate,
-      durationHours: Number(form.durationHours),
-      durationMinutes: Number(form.durationMinutes),
+      durationHours: calculatedHours,      // Auto saves the calculated hours
+      durationMinutes: calculatedMinutes,  // Auto saves the calculated minutes
       clientCompany: form.clientCompany.trim(),
       parentCompany: form.parentCompany.trim(),
       payoutAmount: Number(form.payoutAmount),
       visitType: form.visitType,
-      keyTask: form.keyTask.trim(),
+      keyTask: `[IN: ${inTimeFormatted} | OUT: ${outTimeFormatted}] ${form.keyTask.trim()}`,
       status: form.status,
       signature: savedSignature,
     });
@@ -208,7 +239,7 @@ export default function VisitModal({ isOpen, onClose }) {
               Log New Visit
             </h2>
             <p className="text-xs text-premium-gray-dark mt-0.5">
-              Complete all fields and capture signature
+              Specify log timings and capture supervisor sign
             </p>
           </div>
           <button
@@ -228,6 +259,7 @@ export default function VisitModal({ isOpen, onClose }) {
           className="flex-1 overflow-y-auto scrollbar-thin px-6 py-6 space-y-5"
           noValidate
         >
+          {/* Date of visit */}
           <div>
             <label
               htmlFor="visit-date"
@@ -250,52 +282,88 @@ export default function VisitModal({ isOpen, onClose }) {
             )}
           </div>
 
-          <div>
-            <span className="block text-xs font-medium text-slate-600 uppercase tracking-wide mb-2">
-              On-Site Duration
+          {/* Premium IN and OUT Timing Selectors */}
+          <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-4">
+            <span className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
+              Site Work Timings
             </span>
-            <div className="grid grid-cols-2 gap-4">
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* IN TIME */}
               <div>
-                <label htmlFor="duration-hours" className="sr-only">
-                  Hours
-                </label>
-                <input
-                  id="duration-hours"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="Hours"
-                  value={form.durationHours}
-                  onChange={(e) => updateField('durationHours', e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    errors.duration ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
-                  }`}
-                />
+                <label className="block text-xs text-slate-500 mb-1.5 font-medium">IN Time (Aagman)</label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={form.inHour}
+                    onChange={(e) => updateField('inHour', e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:border-royal-500 focus:ring-1 focus:ring-royal-500"
+                  >
+                    {HOURS_OPTIONS.map(h => <option key={`in-h-${h}`} value={h}>{h}</option>)}
+                  </select>
+                  <select
+                    value={form.inMinute}
+                    onChange={(e) => updateField('inMinute', e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:border-royal-500 focus:ring-1 focus:ring-royal-500"
+                  >
+                    {MINUTES_OPTIONS.map(m => <option key={`in-m-${m}`} value={m}>{m}</option>)}
+                  </select>
+                  <select
+                    value={form.inPeriod}
+                    onChange={(e) => updateField('inPeriod', e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-royal-700 focus:border-royal-500"
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
               </div>
+
+              {/* OUT TIME */}
               <div>
-                <label htmlFor="duration-minutes" className="sr-only">
-                  Minutes
-                </label>
-                <input
-                  id="duration-minutes"
-                  type="number"
-                  min="0"
-                  max="59"
-                  step="1"
-                  placeholder="Minutes"
-                  value={form.durationMinutes}
-                  onChange={(e) => updateField('durationMinutes', e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl border bg-premium-gray/50 text-sm focus:bg-white focus:border-royal-500 focus:ring-2 focus:ring-royal-100 ${
-                    errors.duration ? 'border-red-500 ring-1 ring-red-200 bg-red-50/10' : 'border-transparent'
-                  }`}
-                />
+                <label className="block text-xs text-slate-500 mb-1.5 font-medium">OUT Time (Prasthan)</label>
+                <div className="flex gap-1.5">
+                  <select
+                    value={form.outHour}
+                    onChange={(e) => updateField('outHour', e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:border-royal-500 focus:ring-1 focus:ring-royal-500"
+                  >
+                    {HOURS_OPTIONS.map(h => <option key={`out-h-${h}`} value={h}>{h}</option>)}
+                  </select>
+                  <select
+                    value={form.outMinute}
+                    onChange={(e) => updateField('outMinute', e.target.value)}
+                    className="flex-1 px-2.5 py-2 rounded-xl border border-slate-200 bg-white text-sm focus:border-royal-500 focus:ring-1 focus:ring-royal-500"
+                  >
+                    {MINUTES_OPTIONS.map(m => <option key={`out-m-${m}`} value={m}>{m}</option>)}
+                  </select>
+                  <select
+                    value={form.outPeriod}
+                    onChange={(e) => updateField('outPeriod', e.target.value)}
+                    className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-royal-700 focus:border-royal-500"
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
               </div>
             </div>
+
+            {/* Automatic Calculation Badge */}
+            <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60 text-sm font-medium text-royal-700">
+              <svg className="w-4 h-4 text-royal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>⏱️ Total Duration:</span>
+              <span className="px-2.5 py-0.5 text-xs bg-royal-100 text-royal-800 rounded-full font-bold">
+                {calculatedHours} Hours {calculatedMinutes} Mins
+              </span>
+            </div>
             {errors.duration && (
-              <p className="mt-1.5 text-xs text-red-600 font-medium">{errors.duration}</p>
+              <p className="mt-1 text-xs text-red-600 font-medium">{errors.duration}</p>
             )}
           </div>
 
+          {/* Client Company and Parent Company info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label
