@@ -1,13 +1,21 @@
-import { VISIT_STATUS } from '../utils/constants';
 import {
   formatDisplayDate,
-  formatDuration,
   formatINR,
+  normalizeStatus,
+  stripKeyTaskPrefix,
 } from '../utils/storage';
 import jsPDF from 'jspdf';
 
+function statusLabel(status) {
+  return normalizeStatus(status) === 'completed' ? 'Paid' : 'Pending';
+}
+
 export default function VisitCard({ visit, onDelete }) {
-  const isPaid = visit.status === VISIT_STATUS.PAID;
+  const normalized = normalizeStatus(visit.status);
+  const isCompleted = normalized === 'completed';
+  const inTime = visit.check_in || '—';
+  const outTime = visit.check_out || '—';
+  const displayKeyTask = stripKeyTaskPrefix(visit.key_task) || '—';
 
   const handleDelete = () => {
     const confirmed = window.confirm(
@@ -18,28 +26,28 @@ export default function VisitCard({ visit, onDelete }) {
     }
   };
 
-  // Single PDF Generate karne ka premium function (Fixed & Working!)
   const handleDownloadSinglePDF = () => {
     try {
       const doc = new jsPDF();
-      
-      // Top Header Branding Banner
-      doc.setFillColor(15, 32, 67); // Royal Dark Blue
+
+      doc.setFillColor(15, 32, 67);
       doc.rect(0, 0, 210, 40, 'F');
-      
+
       doc.setTextColor(255, 255, 255);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(20);
       doc.text('INDUSTRIAL SITE VISIT REPORT', 15, 25);
-      
-      // Bottom Footer Line (FIXED HERE - Replaced 'Slate = 240' with clean color codes)
+
       doc.setDrawColor(226, 232, 240);
       doc.line(15, 275, 195, 275);
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
-      doc.text(`Generated via Site Tracker · ${new Date().toLocaleDateString()} · Page 1 of 1`, 15, 282);
+      doc.text(
+        `Generated via Site Tracker · ${new Date().toLocaleDateString()} · Page 1 of 1`,
+        15,
+        282
+      );
 
-      // Report Details Setup
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
       doc.setTextColor(51, 65, 85);
@@ -53,39 +61,39 @@ export default function VisitCard({ visit, onDelete }) {
         currentY += 12;
       };
 
-      addRow('Client Company', visit.clientCompany);
-      addRow('Parent Company', visit.parentCompany || 'N/A');
-      addRow('Visit Date', visit.visitDate ? formatDisplayDate(visit.visitDate) : 'N/A');
-      addRow('Visit Type', visit.visitType || 'N/A');
-      addRow('Duration', formatDuration(visit.durationHours, visit.durationMinutes));
-      addRow('Status', visit.status || VISIT_STATUS.PENDING);
-      addRow('Payout Amount', visit.payoutAmount ? `INR ${Number(visit.payoutAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'INR 0.00');
+      addRow('Client Company', visit.site_name);
+      addRow('Parent Company', visit.parent_company || 'N/A');
+      addRow('Visit Date', visit.date ? formatDisplayDate(visit.date) : 'N/A');
+      addRow('Visit Type', visit.visit_type || 'N/A');
+      addRow('IN Time', inTime);
+      addRow('OUT Time', outTime);
+      addRow('Status', statusLabel(visit.status));
+      addRow(
+        'Payout Amount',
+        visit.payout_amount
+          ? `INR ${Number(visit.payout_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+          : 'INR 0.00'
+      );
 
-      // Key Task Box
       currentY += 5;
-      doc.setFillColor(248, 250, 252); // Light Gray Box
+      doc.setFillColor(248, 250, 252);
       doc.rect(15, currentY, 180, 40, 'F');
-      
+
       doc.setFont('helvetica', 'bold');
       doc.text('Key Task Executed:', 20, currentY + 10);
       doc.setFont('helvetica', 'normal');
-      
-      // Auto-wrap text lines if Key Task is long
-      const splitTasks = doc.splitTextToSize(visit.keyTask || 'No tasks logged.', 170);
+
+      const splitTasks = doc.splitTextToSize(displayKeyTask, 170);
       doc.text(splitTasks, 20, currentY + 22);
 
-      // Signature Rendering (If available)
       if (visit.signature) {
         currentY += 55;
         doc.setFont('helvetica', 'bold');
         doc.text('Client / Manager Signature:', 15, currentY);
-        
-        // Adds Base64 image into PDF directly
         doc.addImage(visit.signature, 'PNG', 15, currentY + 5, 50, 22);
       }
 
-      // Download Trigger with Company Name
-      const fileName = visit.clientCompany ? visit.clientCompany.replace(/\s+/g, '_') : 'Visit';
+      const fileName = visit.site_name ? visit.site_name.replace(/\s+/g, '_') : 'Visit';
       doc.save(`Visit_Report_${fileName}.pdf`);
     } catch (error) {
       console.error('PDF Generation failed:', error);
@@ -98,44 +106,37 @@ export default function VisitCard({ visit, onDelete }) {
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <time
-              dateTime={visit.visitDate}
-              className="text-sm font-semibold text-royal-800"
-            >
-              {formatDisplayDate(visit.visitDate)}
+            <time dateTime={visit.date} className="text-sm font-semibold text-royal-800">
+              {formatDisplayDate(visit.date)}
             </time>
             <span
               className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                isPaid
+                isCompleted
                   ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                   : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
               }`}
             >
               <span
                 className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                  isPaid ? 'bg-emerald-500' : 'bg-amber-500'
+                  isCompleted ? 'bg-emerald-500' : 'bg-amber-500'
                 }`}
                 aria-hidden
               />
-              {visit.status || VISIT_STATUS.PENDING}
+              {statusLabel(visit.status)}
             </span>
             <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-royal-50 text-royal-700">
-              {visit.visitType}
+              {visit.visit_type}
             </span>
           </div>
-          <h3 className="text-base font-semibold text-slate-800 truncate">
-            {visit.clientCompany}
-          </h3>
-          <p className="text-sm text-premium-gray-dark truncate">
-            {visit.parentCompany}
-          </p>
+          <h3 className="text-base font-semibold text-slate-800 truncate">{visit.site_name}</h3>
+          <p className="text-sm text-premium-gray-dark truncate">{visit.parent_company}</p>
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <button
             type="button"
             onClick={handleDownloadSinglePDF}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-royal-700 bg-royal-50 hover:bg-royal-100 opacity-80 group-hover:opacity-100 transition-all duration-200"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-royal-700 bg-royal-50 hover:bg-royal-100 opacity-80 group-hover:opacity-100 transition-all duration-200 border-none"
             title="Download Single PDF Report"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
@@ -146,7 +147,7 @@ export default function VisitCard({ visit, onDelete }) {
           <button
             type="button"
             onClick={handleDelete}
-            className="w-9 h-9 flex items-center justify-center rounded-xl text-premium-gray-dark hover:text-red-600 hover:bg-red-50 opacity-70 group-hover:opacity-100 transition-all duration-200"
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-premium-gray-dark hover:text-red-600 hover:bg-red-50 opacity-70 group-hover:opacity-100 transition-all duration-200 border-none"
             aria-label="Delete visit"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -163,25 +164,29 @@ export default function VisitCard({ visit, onDelete }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-y border-premium-gray-mid/40">
         <div>
           <p className="text-[10px] uppercase tracking-wider text-premium-gray-dark font-medium">
-            Duration
+            IN Time
           </p>
-          <p className="mt-1 text-sm font-medium text-slate-800">
-            {formatDuration(visit.durationHours, visit.durationMinutes)}
+          <p className="mt-1 text-sm font-medium text-emerald-700">{inTime}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-premium-gray-dark font-medium">
+            OUT Time
           </p>
+          <p className="mt-1 text-sm font-medium text-rose-700">{outTime}</p>
         </div>
         <div>
           <p className="text-[10px] uppercase tracking-wider text-premium-gray-dark font-medium">
             Payout
           </p>
           <p className="mt-1 text-sm font-medium text-royal-700">
-            {formatINR(visit.payoutAmount)}
+            {formatINR(visit.payout_amount)}
           </p>
         </div>
-        <div className="col-span-2 sm:col-span-2">
+        <div className="col-span-2 sm:col-span-1">
           <p className="text-[10px] uppercase tracking-wider text-premium-gray-dark font-medium">
             Key Task
           </p>
-          <p className="mt-1 text-sm text-slate-700 line-clamp-2">{visit.keyTask}</p>
+          <p className="mt-1 text-sm text-slate-700 line-clamp-2">{displayKeyTask}</p>
         </div>
       </div>
 
@@ -193,7 +198,7 @@ export default function VisitCard({ visit, onDelete }) {
           <div className="inline-block p-3 rounded-xl bg-premium-gray/50 border border-premium-gray-mid/60">
             <img
               src={visit.signature}
-              alt={`Signature for visit on ${formatDisplayDate(visit.visitDate)}`}
+              alt={`Signature for visit on ${formatDisplayDate(visit.date)}`}
               className="h-16 sm:h-20 max-w-full object-contain"
             />
           </div>

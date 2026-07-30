@@ -2,7 +2,18 @@ import { useApp } from '../context/AppContext';
 import VisitCard from './VisitCard';
 
 export default function VisitHistory() {
-  const { filteredVisits, searchQuery, deleteVisit } = useApp();
+  const { filteredVisits = [], searchQuery = '', deleteVisit, visitsLoading } = useApp() || {};
+
+  if (visitsLoading) {
+    return (
+      <section className="text-center py-10 text-slate-500 text-sm">
+        Loading site visits...
+      </section>
+    );
+  }
+
+  const visitsList = filteredVisits || [];
+  const activeSearch = searchQuery || '';
 
   return (
     <section>
@@ -12,13 +23,13 @@ export default function VisitHistory() {
             Past Visits
           </h2>
           <p className="text-sm text-premium-gray-dark mt-0.5">
-            {filteredVisits.length} record{filteredVisits.length !== 1 ? 's' : ''}
-            {searchQuery.trim() ? ' matching your search' : ' in your log'}
+            {visitsList.length} record{visitsList.length !== 1 ? 's' : ''}
+            {activeSearch.trim() ? ' matching your search' : ' in your log'}
           </p>
         </div>
       </div>
 
-      {filteredVisits.length === 0 ? (
+      {visitsList.length === 0 ? (
         <div className="bg-white rounded-2xl p-12 sm:p-16 text-center shadow-card border border-white">
           <div className="w-14 h-14 mx-auto rounded-2xl bg-royal-50 flex items-center justify-center text-royal-600 mb-5">
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -30,18 +41,18 @@ export default function VisitHistory() {
             </svg>
           </div>
           <h3 className="text-base font-semibold text-slate-800">
-            {searchQuery.trim() ? 'No matching visits' : 'No visits logged yet'}
+            {activeSearch.trim() ? 'No matching visits' : 'No visits logged yet'}
           </h3>
           <p className="mt-2 text-sm text-premium-gray-dark max-w-sm mx-auto">
-            {searchQuery.trim()
+            {activeSearch.trim()
               ? 'Try a different search term or clear the search bar.'
               : 'Tap “Log New Visit” to record your first industrial site visit.'}
           </p>
         </div>
       ) : (
         <div className="space-y-4 sm:space-y-5">
-          {filteredVisits.map((visit) => (
-            <VisitCard key={visit.id} visit={visit} onDelete={deleteVisit} />
+          {visitsList.map((visit) => (
+            <VisitCard key={visit.id || Math.random()} visit={visit} onDelete={deleteVisit} />
           ))}
         </div>
       )}

@@ -1,4 +1,6 @@
-import { supabase } from '../lib/supabase';
+import { supabase } from '../supabase';
+
+export { supabase };
 
 export function validateEmail(email) {
   const pattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,8 +23,11 @@ export function mapSessionToUser(session) {
     email: session.user.email,
     name:
       session.user.user_metadata?.name ||
+      session.user.user_metadata?.full_name ||
       session.user.email?.split('@')[0] ||
       'User',
+    avatar_url: session.user.user_metadata?.avatar_url || null,
+    user_metadata: session.user.user_metadata || {},
   };
 }
 

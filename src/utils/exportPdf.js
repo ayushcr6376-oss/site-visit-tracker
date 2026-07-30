@@ -1,7 +1,16 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatDisplayDate, formatDuration, formatINR } from './storage';
+import {
+  formatDisplayDate,
+  formatINR,
+  normalizeStatus,
+  stripKeyTaskPrefix,
+} from './storage';
 import { VISIT_STATUS } from './constants';
+
+function statusLabel(status) {
+  return normalizeStatus(status) === VISIT_STATUS.COMPLETED ? 'Completed' : 'Pending';
+}
 
 export function generateVisitsPdfReport(visits, summary, userName) {
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -40,9 +49,9 @@ export function generateVisitsPdfReport(visits, summary, userName) {
   const summaryData = [
     ['Total Site Visits', String(summary.totalVisits)],
     ['Total Hours Logged', `${summary.totalHours.toFixed(2)} hrs`],
-    ['Total Billing / Revenue', `INR ${summary.totalRevenue}`],
-    ['Paid Visits', String(visits.filter((v) => v.status === VISIT_STATUS.PAID).length)],
-    ['Pending Visits', String(visits.filter((v) => v.status !== VISIT_STATUS.PAID).length)],
+    ['Total Billing / Revenue', formatINR(summary.totalRevenue)],
+    ['Completed Visits', String(summary.completed ?? 0)],
+    ['Pending Visits', String(summary.pending ?? 0)],
   ];
 
   autoTable(doc, {
@@ -81,13 +90,14 @@ export function generateVisitsPdfReport(visits, summary, userName) {
   } else {
     const tableBody = visits.map((visit, index) => [
       String(index + 1),
-      formatDisplayDate(visit.visitDate),
-      formatDuration(visit.durationHours, visit.durationMinutes),
-      visit.clientCompany,
-      visit.parentCompany,
-      `INR ${visit.payoutAmount}`,
-      visit.visitType,
-      visit.status || VISIT_STATUS.PENDING,
+      formatDisplayDate(visit.date),
+      visit.check_in || '—',
+      visit.check_out || '—',
+      visit.site_name,
+      visit.parent_company,
+      formatINR(visit.payout_amount),
+      visit.visit_type,
+      statusLabel(visit.status),
     ]);
 
     autoTable(doc, {
@@ -96,7 +106,8 @@ export function generateVisitsPdfReport(visits, summary, userName) {
         [
           '#',
           'Date',
-          'Duration',
+          'IN Time',
+          'OUT Time',
           'Client',
           'Parent/Vendor',
           'Payout',
@@ -116,8 +127,9 @@ export function generateVisitsPdfReport(visits, summary, userName) {
       alternateRowStyles: { fillColor: [245, 245, 247] },
       columnStyles: {
         0: { cellWidth: 8 },
-        1: { cellWidth: 22 },
+        1: { cellWidth: 20 },
         2: { cellWidth: 16 },
+        3: { cellWidth: 16 },
       },
     });
 
@@ -125,7 +137,8 @@ export function generateVisitsPdfReport(visits, summary, userName) {
 
     const pageHeight = doc.internal.pageSize.getHeight();
     visits.forEach((visit, index) => {
-      if (!visit.keyTask && !visit.signature) return;
+      const taskText = stripKeyTaskPrefix(visit.key_task);
+      if (!taskText && !visit.signature) return;
 
       const blockHeight = 50;
       if (y + blockHeight > pageHeight - 20) {
@@ -139,14 +152,11 @@ export function generateVisitsPdfReport(visits, summary, userName) {
       doc.text(`Visit ${index + 1} — Additional Details`, margin, y);
       y += 5;
 
-      if (visit.keyTask) {
+      if (taskText) {
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(60, 60, 67);
         doc.setFontSize(8);
-        const taskLines = doc.splitTextToSize(
-          `Task: ${visit.keyTask}`,
-          pageWidth - margin * 2
-        );
+        const taskLines = doc.splitTextToSize(`Task: ${taskText}`, pageWidth - margin * 2);
         doc.text(taskLines, margin, y);
         y += taskLines.length * 4 + 4;
       }

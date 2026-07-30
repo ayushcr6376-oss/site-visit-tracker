@@ -12,6 +12,7 @@ import {
   signInWithEmail,
   signOutUser,
   signUpWithEmail,
+  supabase,
   validateEmail,
   validateName,
   validatePassword,
@@ -22,7 +23,6 @@ import {
   deleteVisitById,
   fetchVisits,
 } from '../utils/storage';
-import { VISIT_STATUS } from '../utils/constants';
 
 const AppContext = createContext(null);
 
@@ -34,12 +34,13 @@ export function AppProvider({ children }) {
   const [visitsLoading, setVisitsLoading] = useState(false);
   const [authError, setAuthError] = useState('');
 
-  const loadUserVisits = useCallback(async (userId) => {
+  const loadUserVisits = useCallback(async () => {
     setVisitsLoading(true);
     try {
-      const data = await fetchVisits(userId);
+      const data = await fetchVisits();
       setVisits(data || []);
-    } catch {
+    } catch (err) {
+      console.error(err);
       setAuthError('Failed to load visits from cloud. Please refresh the page.');
       setVisits([]);
     } finally {
@@ -54,7 +55,7 @@ export function AppProvider({ children }) {
       setAuthLoading(false);
 
       if (nextUser) {
-        loadUserVisits(nextUser.id);
+        loadUserVisits();
       } else {
         setVisits([]);
         setVisitsLoading(false);
@@ -64,12 +65,38 @@ export function AppProvider({ children }) {
     return unsubscribe;
   }, [loadUserVisits]);
 
+  // 📸 PROFILE AVATAR UPDATE FUNCTION
+  const updateProfileAvatar = useCallback(async (avatarUrl) => {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        data: { avatar_url: avatarUrl },
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        setUser((prev) => ({
+          ...prev,
+          avatar_url: avatarUrl,
+          user_metadata: {
+            ...prev?.user_metadata,
+            avatar_url: avatarUrl,
+          },
+        }));
+      }
+      return { success: true };
+    } catch (err) {
+      console.error('Avatar update failed:', err);
+      return { success: false, error: err.message };
+    }
+  }, []);
+
   const summary = useMemo(() => computeSummary(visits), [visits]);
 
   // Master sorted and filtered visits log
   const filteredVisits = useMemo(() => {
     const sortedRaw = [...visits].sort(
-      (a, b) => new Date(b.createdAt || b.visitDate).getTime() - new Date(a.createdAt || a.visitDate).getTime()
+      (a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime()
     );
 
     const query = searchQuery.trim().toLowerCase();
@@ -77,12 +104,12 @@ export function AppProvider({ children }) {
 
     return sortedRaw.filter((visit) => {
       const haystack = [
-        visit.clientCompany,
-        visit.parentCompany,
-        visit.visitType,
-        visit.keyTask,
+        visit.site_name,
+        visit.parent_company,
+        visit.visit_type,
+        visit.key_task,
         visit.status,
-        visit.visitDate,
+        visit.date,
       ]
         .join(' ')
         .toLowerCase();
@@ -92,7 +119,6 @@ export function AppProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     setAuthError('');
-
     if (!validateEmail(email)) {
       setAuthError('Please enter a valid email address.');
       return false;
@@ -110,7 +136,7 @@ export function AppProvider({ children }) {
 
     setUser(signedInUser);
     if (signedInUser) {
-      await loadUserVisits(signedInUser.id);
+      await loadUserVisits();
     }
     return true;
   }, [loadUserVisits]);
@@ -170,44 +196,29 @@ export function AppProvider({ children }) {
 
   const addVisit = useCallback(
     async (visitData) => {
-      if (!user?.id) return false;
-
       try {
-        const newVisit = await createVisit(user.id, {
-          visitDate: visitData.visitDate,
-          durationHours: visitData.durationHours,
-          durationMinutes: visitData.durationMinutes,
-          clientCompany: visitData.clientCompany,
-          parentCompany: visitData.parentCompany,
-          payoutAmount: visitData.payoutAmount,
-          visitType: visitData.visitType,
-          keyTask: visitData.keyTask,
-          status: visitData.status || VISIT_STATUS.PENDING,
-          signature: visitData.signature || null,
-        });
-        setVisits((prev) => [newVisit, ...prev]);
+        const newVisit = await createVisit(visitData);
+        if (newVisit) {
+          setVisits((prev) => [newVisit, ...prev]);
+        }
         return true;
-      } catch {
+      } catch (err) {
+        console.error('Save failed in context:', err);
         setAuthError('Failed to save visit. Please try again.');
         return false;
       }
     },
-    [user]
+    []
   );
 
-  // Robust and solid delete function with state sync
   const deleteVisit = useCallback(async (visitId) => {
     if (!visitId) return;
-    
     try {
-      // First delete from cloud database permanently
       await deleteVisitById(visitId);
-      
-      // If db call succeeds, filter it out from state immediately
       setVisits((prev) => prev.filter((v) => v.id !== visitId));
       setAuthError('');
     } catch (err) {
-      console.error("Delete failed:", err);
+      console.error('Delete failed:', err);
       setAuthError('Failed to delete visit from cloud database. Please try again.');
     }
   }, []);
@@ -224,12 +235,14 @@ export function AppProvider({ children }) {
       signup,
       logout,
       visits,
-      filteredVisits, // Main components use this to list records dynamically
+      filteredVisits,
       summary,
       searchQuery,
       setSearchQuery,
       addVisit,
+      createVisit: addVisit,
       deleteVisit,
+      updateProfileAvatar,
     }),
     [
       user,
@@ -245,6 +258,7 @@ export function AppProvider({ children }) {
       searchQuery,
       addVisit,
       deleteVisit,
+      updateProfileAvatar,
     ]
   );
 

@@ -25,18 +25,24 @@ function MetricCard({ label, value, sublabel, icon }) {
 }
 
 export default function SummaryCards() {
-  const { summary } = useApp();
+  const { summary } = useApp() || {};
+
+  // Safe side agar data loading state me ho toh zero show kare crash hone ki jagah
+  const totalVisits = summary?.totalVisits || 0;
+  const totalHours = summary?.totalHours || 0;
+  const totalMinutes = summary?.totalMinutes || 0;
+  const totalRevenue = summary?.totalRevenue || 0;
 
   const hoursDisplay =
-    summary.totalHours >= 1
-      ? `${summary.totalHours.toFixed(1)} hrs`
-      : `${summary.totalMinutes} min`;
+    totalHours >= 1
+      ? `${Number(totalHours).toFixed(1)} hrs`
+      : `${totalMinutes} min`;
 
   return (
     <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
       <MetricCard
         label="Total Site Visits"
-        value={summary.totalVisits}
+        value={totalVisits}
         sublabel="Logged to date"
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -56,7 +62,7 @@ export default function SummaryCards() {
       />
       <MetricCard
         label="Total Billing"
-        value={formatINR(summary.totalRevenue)}
+        value={formatINR(totalRevenue)}
         sublabel="Revenue earned (INR)"
         icon={
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>

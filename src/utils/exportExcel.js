@@ -1,4 +1,8 @@
-import { formatDisplayDate, formatDuration } from './storage';
+import {
+  formatDisplayDate,
+  normalizeStatus,
+  stripKeyTaskPrefix,
+} from './storage';
 import { VISIT_STATUS } from './constants';
 
 function escapeCsvCell(value) {
@@ -13,12 +17,16 @@ function buildCsvRow(cells) {
   return cells.map(escapeCsvCell).join(',');
 }
 
+function statusLabel(status) {
+  return normalizeStatus(status) === VISIT_STATUS.COMPLETED ? 'Completed' : 'Pending';
+}
+
 export function exportVisitsToCsv(visits) {
   const headers = [
     'Visit ID',
     'Date of Visit',
-    'Duration',
-    'Duration (Minutes)',
+    'IN Time',
+    'OUT Time',
     'Client Company',
     'Parent/Vendor Company',
     'Payout (INR)',
@@ -29,26 +37,22 @@ export function exportVisitsToCsv(visits) {
     'Created At',
   ];
 
-  const rows = visits.map((visit) => {
-    const durationLabel = formatDuration(visit.durationHours, visit.durationMinutes);
-    const totalMinutes =
-      (Number(visit.durationHours) || 0) * 60 + (Number(visit.durationMinutes) || 0);
-
-    return buildCsvRow([
+  const rows = visits.map((visit) =>
+    buildCsvRow([
       visit.id,
-      formatDisplayDate(visit.visitDate),
-      durationLabel,
-      totalMinutes,
-      visit.clientCompany,
-      visit.parentCompany,
-      Number(visit.payoutAmount).toFixed(2),
-      visit.visitType,
-      visit.status || VISIT_STATUS.PENDING,
-      visit.keyTask,
+      formatDisplayDate(visit.date),
+      visit.check_in || '',
+      visit.check_out || '',
+      visit.site_name,
+      visit.parent_company,
+      Number(visit.payout_amount || 0).toFixed(2),
+      visit.visit_type,
+      statusLabel(visit.status),
+      stripKeyTaskPrefix(visit.key_task),
       visit.signature ? 'Yes' : 'No',
-      visit.createdAt ? new Date(visit.createdAt).toISOString() : '',
-    ]);
-  });
+      visit.created_at ? new Date(visit.created_at).toISOString() : '',
+    ])
+  );
 
   const csvContent = [buildCsvRow(headers), ...rows].join('\r\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
