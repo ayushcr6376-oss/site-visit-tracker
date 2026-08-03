@@ -1,70 +1,186 @@
 import React, { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useTranslation } from 'react-i18next';
+import { useApp } from '../context/AppContext';
 
-// ✅ Bullet-Proof Multi-Path Env Fetch (Agar import bhatak raha hai toh direct client yahin bana do)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export default function Auth() {
+  const { t, i18n } = useTranslation();
+  const { login, signup, authError, setAuthError } = useApp();
 
-export default function AuthScreen() {
+  // Mode state: 'login' ya 'signup'
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  // Form inputs
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
 
-  const handleLogin = async (e) => {
+  const isHindi = i18n.language && i18n.language.startsWith('hi');
+
+  const toggleMode = () => {
+    setIsSignUp(!isSignUp);
+    setAuthError(''); // Clear previous errors on toggle
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setMessage('');
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-    } catch (err) {
-      setMessage(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
+
+    if (isSignUp) {
+      await signup(name, email, password, confirmPassword);
+    } else {
+      await login(email, password);
     }
+    setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl border border-slate-100 shadow-xl p-8 space-y-6">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md space-y-6">
+        {/* Header */}
         <div className="text-center space-y-2">
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">Industrial Tracker</h2>
-          <p className="text-sm text-slate-500">Sign in to manage your site visits</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isSignUp
+              ? isHindi
+                ? 'नया खाता बनाएं'
+                : 'Create an Account'
+              : isHindi
+              ? 'साइन इन करें'
+              : 'Sign In'}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isSignUp
+              ? isHindi
+                ? 'साइट विजिट ट्रैकर में आपका स्वागत है'
+                : 'Enter your details to register'
+              : isHindi
+              ? 'अपने खाते में प्रवेश करें'
+              : 'Enter your email & password to sign in'}
+          </p>
         </div>
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Email Address</label>
+
+        {/* Error Alert */}
+        {authError && (
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200 text-center">
+            {authError}
+          </div>
+        )}
+
+        {/* Auth Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Name Field (Only shown in Sign Up mode) */}
+          {isSignUp && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                {isHindi ? 'पूरा नाम' : 'Full Name'}
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={isHindi ? 'अपना नाम दर्ज करें' : 'Enter your name'}
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+          )}
+
+          {/* Email Field */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              {isHindi ? 'ईमेल' : 'Email Address'}
+            </label>
             <input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
-              placeholder="name@company.com"
+              placeholder="example@gmail.com"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">Password</label>
+
+          {/* Password Field */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-600 mb-1">
+              {isHindi ? 'पासवर्ड' : 'Password'}
+            </label>
             <input
               type="password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-blue-500 transition-colors"
               placeholder="••••••••"
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
             />
           </div>
-          {message && <p className="text-xs font-medium text-rose-600 text-center">{message}</p>}
+
+          {/* Confirm Password Field (Only shown in Sign Up mode) */}
+          {isSignUp && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                {isHindi ? 'पासवर्ड की पुष्टि करें' : 'Confirm Password'}
+              </label>
+              <input
+                type="password"
+                required
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+          )}
+
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md transition-colors disabled:opacity-50 text-sm"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-all text-sm shadow"
           >
-            {loading ? 'Signing in...' : 'Sign In'}
+            {loading
+              ? isHindi
+                ? 'कृपया प्रतीक्षा करें...'
+                : 'Please wait...'
+              : isSignUp
+              ? isHindi
+                ? 'अकाउंट बनाएं'
+                : 'Sign Up'
+              : isHindi
+              ? 'साइन इन करें'
+              : 'Sign In'}
           </button>
         </form>
+
+        {/* 🔄 TOGGLE BETWEEN SIGN IN AND SIGN UP */}
+        <div className="text-center pt-2 border-t">
+          <p className="text-xs text-slate-600">
+            {isSignUp ? (
+              <>
+                {isHindi ? 'पहले से खाता है?' : 'Already have an account?'}{' '}
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="text-blue-600 font-semibold hover:underline"
+                >
+                  {isHindi ? 'साइन इन करें' : 'Sign In'}
+                </button>
+              </>
+            ) : (
+              <>
+                {isHindi ? 'नया खाता बनाना चाहते हैं?' : "Don't have an account?"}{' '}
+                <button
+                  type="button"
+                  onClick={toggleMode}
+                  className="text-blue-600 font-semibold hover:underline"
+                >
+                  {isHindi ? 'साइन अप करें (Create Account)' : 'Sign Up'}
+                </button>
+              </>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );
