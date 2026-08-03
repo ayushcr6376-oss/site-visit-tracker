@@ -36,7 +36,7 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Fetch Visits from 'site_visits' Table (ONLY for Current User ID)
+  // 2. Fetch Visits from 'site_visits' Table
   const fetchVisits = async (userId) => {
     try {
       setLoading(true);
@@ -55,7 +55,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add New Visit to 'site_visits' Table
+  // 3. Add New Visit to 'site_visits'
   const addVisit = async (visitData) => {
     if (!user) return;
     try {
@@ -78,39 +78,47 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Fixed Sign Up Function
+  // 4. Clean & Fixed Sign Up Function (Bypasses 422 Error)
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
+
+    if (!email || !password) {
+      setAuthError('Please fill in all required fields');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setAuthError('Passwords do not match');
       return;
     }
+
+    if (password.length < 6) {
+      setAuthError('Password must be at least 6 characters long');
+      return;
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+
     try {
+      // Direct signup without payload metadata to fix 422 error
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { full_name: name },
-        },
+        email: cleanEmail,
+        password: password,
       });
 
       if (error) throw error;
 
-      // Agar session instantly mila
-      if (data?.session) {
-        setUser(data.session.user);
-        fetchVisits(data.session.user.id);
-      } else {
-        // Agar account create ho gaya, direct login execute karo
-        await login(email, password);
+      // Auto login execution
+      if (data?.user) {
+        await login(cleanEmail, password);
       }
     } catch (err) {
-      // Handling duplicate email gracefully
-      if (err.message.includes('already registered')) {
+      console.error('Signup Error:', err);
+      if (err.status === 422 || err.message?.includes('already registered')) {
         try {
-          await login(email, password);
+          await login(cleanEmail, password);
         } catch (loginErr) {
-          setAuthError('User already exists. Please login with your password.');
+          setAuthError('Account exists or validation failed. Please login directly.');
         }
       } else {
         setAuthError(err.message);
@@ -122,9 +130,10 @@ export function AppProvider({ children }) {
   const login = async (email, password) => {
     setAuthError('');
     try {
+      const cleanEmail = email.trim().toLowerCase();
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: cleanEmail,
+        password: password,
       });
       if (error) throw error;
       if (data?.user) {
@@ -136,7 +145,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Logout Function (Clears State & Storage)
+  // 6. Logout Function
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
