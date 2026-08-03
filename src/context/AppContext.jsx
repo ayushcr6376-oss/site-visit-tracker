@@ -9,7 +9,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Auth State Listener
+  // 1. Initial Session Check & Auth Listener
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
@@ -36,7 +36,7 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Fetch Visits from 'site_visits' Table
+  // 2. Fetch Visits
   const fetchVisits = async (userId) => {
     try {
       setLoading(true);
@@ -55,7 +55,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add New Visit
+  // 3. Add Visit
   const addVisit = async (visitData) => {
     if (!user) return;
     try {
@@ -78,7 +78,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Smart Zero-Error Sign Up Function
+  // 4. Fixed Non-Blocking Sign Up
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
@@ -99,53 +99,53 @@ export function AppProvider({ children }) {
 
     const cleanEmail = email.trim().toLowerCase();
 
-    // STEP A: Direct Login Attempt (To bypass 422 for already existing accounts)
-    const { data: loginData } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: password,
-    });
-
-    if (loginData?.user) {
-      setUser(loginData.user);
-      fetchVisits(loginData.user.id);
-      return;
-    }
-
-    // STEP B: If account is brand new, execute SignUp
     try {
-      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+      // Direct SignUp attempt
+      const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
       });
 
-      if (signUpErr) throw signUpErr;
+      if (error) throw error;
 
-      if (signUpData?.user) {
-        setUser(signUpData.user);
-        if (signUpData?.session) {
-          fetchVisits(signUpData.user.id);
-        } else {
-          // Instant Fallback Login
-          await login(cleanEmail, password);
-        }
-      }
-    } catch (err) {
-      // Fallback: If SignUp fails due to 422 or duplicate error, force final login
-      try {
-        const { data: finalLogin, error: finalErr } = await supabase.auth.signInWithPassword({
+      if (data?.session) {
+        setUser(data.session.user);
+        fetchVisits(data.session.user.id);
+      } else if (data?.user) {
+        // If user created without session, attempt fast login
+        const { data: loginData } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password: password,
         });
 
-        if (finalLogin?.user) {
-          setUser(finalLogin.user);
-          fetchVisits(finalLogin.user.id);
-          return;
+        if (loginData?.user) {
+          setUser(loginData.user);
+          fetchVisits(loginData.user.id);
+        } else {
+          setAuthError('Account created! Please switch to Sign In tab and log in.');
         }
+      }
+    } catch (err) {
+      console.error('Signup error:', err);
+      if (err.message?.includes('already registered')) {
+        // If already exists, try logging in
+        try {
+          const { data: loginData } = await supabase.auth.signInWithPassword({
+            email: cleanEmail,
+            password: password,
+          });
 
-        if (finalErr) throw finalErr;
-      } catch (e) {
-        setAuthError(err.message || 'Authentication error. Please check your credentials.');
+          if (loginData?.user) {
+            setUser(loginData.user);
+            fetchVisits(loginData.user.id);
+            return;
+          }
+        } catch (e) {
+          // ignore
+        }
+        setAuthError('Account already exists. Please use Sign In.');
+      } else {
+        setAuthError(err.message || 'Signup failed');
       }
     }
   };
@@ -169,7 +169,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Logout Function
+  // 6. Logout
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
