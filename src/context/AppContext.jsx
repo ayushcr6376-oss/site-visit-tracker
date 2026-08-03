@@ -78,7 +78,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Bulletproof Sign Up Function with Instant Auto-Login Fallback
+  // 4. Bulletproof Presentation Signup (Catches 422 and executes Direct Login)
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
@@ -92,59 +92,43 @@ export function AppProvider({ children }) {
       return;
     }
 
-    if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters long');
-      return;
-    }
-
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      // Step A: Attempt Signup
-      const { data } = await supabase.auth.signUp({
+      // Step A: Attempt standard Signup
+      const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
       });
 
-      // Step B: If session created instantly
       if (data?.session) {
         setUser(data.session.user);
         fetchVisits(data.session.user.id);
         return;
       }
 
-      // Step C: User created in DB but session missed -> Direct Login execution
-      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
-
-      if (loginErr) throw loginErr;
-
-      if (loginData?.user) {
-        setUser(loginData.user);
-        fetchVisits(loginData.user.id);
-      }
+      if (error) throw error;
     } catch (err) {
-      console.error('Auth Flow Fallback:', err);
-
-      // Final Safety Fallback: Force Login
+      console.warn('Signup issue encountered, executing direct login:', err);
+      // Step B: Auto-Login Trigger (Bypasses 422/Already Registered UI block)
       try {
-        const { data: fallbackLogin, error: fbErr } = await supabase.auth.signInWithPassword({
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password: password,
         });
 
-        if (!fbErr && fallbackLogin?.user) {
-          setUser(fallbackLogin.user);
-          fetchVisits(fallbackLogin.user.id);
+        if (loginData?.user) {
+          setUser(loginData.user);
+          fetchVisits(loginData.user.id);
           return;
         }
-      } catch (e) {
-        // Ignore fallback error
-      }
 
-      setAuthError(err.message || 'Signup failed. Please try signing in.');
+        if (loginErr) {
+          setAuthError('User registration issue. Try logging in or create user in Supabase dashboard.');
+        }
+      } catch (e) {
+        setAuthError(err.message || 'Auth error');
+      }
     }
   };
 
