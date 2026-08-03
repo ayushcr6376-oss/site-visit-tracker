@@ -11,7 +11,6 @@ export function AppProvider({ children }) {
 
   // 1. Initial Session Check & Auth State Listener
   useEffect(() => {
-    // Check active session
     supabase.auth.getSession().then(({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -23,7 +22,6 @@ export function AppProvider({ children }) {
       }
     });
 
-    // Listen for Auth Changes (Sign In, Sign Out, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -38,12 +36,12 @@ export function AppProvider({ children }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Fetch Visits (ONLY for Current User ID)
+  // 2. Fetch Visits from 'site_visits' Table (ONLY for Current User ID)
   const fetchVisits = async (userId) => {
     try {
       setLoading(true);
       const { data, error } = await supabase
-        .from('visits')
+        .from('site_visits')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
@@ -51,23 +49,23 @@ export function AppProvider({ children }) {
       if (error) throw error;
       setVisits(data || []);
     } catch (err) {
-      console.error('Error fetching visits:', err.message);
+      console.error('Error fetching site_visits:', err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Add New Visit (Attaching Current User ID)
+  // 3. Add New Visit to 'site_visits' Table
   const addVisit = async (visitData) => {
     if (!user) return;
     try {
       const newEntry = {
         ...visitData,
-        user_id: user.id, // 👈 Ensures data stays private to this user
+        user_id: user.id,
       };
 
       const { data, error } = await supabase
-        .from('visits')
+        .from('site_visits')
         .insert([newEntry])
         .select();
 
@@ -76,7 +74,7 @@ export function AppProvider({ children }) {
         setVisits((prev) => [data[0], ...prev]);
       }
     } catch (err) {
-      console.error('Error adding visit:', err.message);
+      console.error('Error adding site_visit:', err.message);
     }
   };
 
@@ -115,12 +113,12 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Logout Function (Clears State)
+  // 6. Logout Function (Clears State & Storage)
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setVisits([]); // 👈 Clear data on logout
-    localStorage.clear(); // 👈 Clear local storage
+    setVisits([]);
+    localStorage.clear();
   };
 
   return (
