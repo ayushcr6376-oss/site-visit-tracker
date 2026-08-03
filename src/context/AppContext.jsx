@@ -1,274 +1,146 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
-import {
-  mapSessionToUser,
-  onAuthStateChange,
-  signInWithEmail,
-  signOutUser,
-  signUpWithEmail,
-  supabase,
-  validateEmail,
-  validateName,
-  validatePassword,
-} from '../utils/auth';
-import {
-  computeSummary,
-  createVisit,
-  deleteVisitById,
-  fetchVisits,
-} from '../utils/storage';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../supabase';
 
-const AppContext = createContext(null);
+const AppContext = createContext();
 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [visits, setVisits] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [authLoading, setAuthLoading] = useState(true);
-  const [visitsLoading, setVisitsLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  const loadUserVisits = useCallback(async () => {
-    setVisitsLoading(true);
-    try {
-      const data = await fetchVisits();
-      setVisits(data || []);
-    } catch (err) {
-      console.error(err);
-      setAuthError('Failed to load visits from cloud. Please refresh the page.');
-      setVisits([]);
-    } finally {
-      setVisitsLoading(false);
-    }
-  }, []);
-
+  // 1. Initial Session Check & Auth State Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((session) => {
-      const nextUser = mapSessionToUser(session);
-      setUser(nextUser);
-      setAuthLoading(false);
-
-      if (nextUser) {
-        loadUserVisits();
+    // Check active session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        fetchVisits(currentUser.id);
       } else {
         setVisits([]);
-        setVisitsLoading(false);
+        setLoading(false);
       }
     });
 
-    return unsubscribe;
-  }, [loadUserVisits]);
+    // Listen for Auth Changes (Sign In, Sign Out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      if (currentUser) {
+        fetchVisits(currentUser.id);
+      } else {
+        setVisits([]);
+        setLoading(false);
+      }
+    });
 
-  // 📸 PROFILE AVATAR UPDATE FUNCTION
-  const updateProfileAvatar = useCallback(async (avatarUrl) => {
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // 2. Fetch Visits (ONLY for Current User ID)
+  const fetchVisits = async (userId) => {
     try {
-      const { data, error } = await supabase.auth.updateUser({
-        data: { avatar_url: avatarUrl },
-      });
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('visits')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-
-      if (data?.user) {
-        setUser((prev) => ({
-          ...prev,
-          avatar_url: avatarUrl,
-          user_metadata: {
-            ...prev?.user_metadata,
-            avatar_url: avatarUrl,
-          },
-        }));
-      }
-      return { success: true };
+      setVisits(data || []);
     } catch (err) {
-      console.error('Avatar update failed:', err);
-      return { success: false, error: err.message };
+      console.error('Error fetching visits:', err.message);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  const summary = useMemo(() => computeSummary(visits), [visits]);
-
-  // Master sorted and filtered visits log
-  const filteredVisits = useMemo(() => {
-    const sortedRaw = [...visits].sort(
-      (a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime()
-    );
-
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return sortedRaw;
-
-    return sortedRaw.filter((visit) => {
-      const haystack = [
-        visit.site_name,
-        visit.parent_company,
-        visit.visit_type,
-        visit.key_task,
-        visit.status,
-        visit.date,
-      ]
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-  }, [visits, searchQuery]);
-
-  const login = useCallback(async (email, password) => {
-    setAuthError('');
-    if (!validateEmail(email)) {
-      setAuthError('Please enter a valid email address.');
-      return false;
-    }
-    if (!password) {
-      setAuthError('Password is required.');
-      return false;
-    }
-
-    const { user: signedInUser, error } = await signInWithEmail(email, password);
-    if (error) {
-      setAuthError(error);
-      return false;
-    }
-
-    setUser(signedInUser);
-    if (signedInUser) {
-      await loadUserVisits();
-    }
-    return true;
-  }, [loadUserVisits]);
-
-  const signup = useCallback(async (name, email, password, confirmPassword) => {
-    setAuthError('');
-    const trimmedName = name.trim();
-    const normalizedEmail = email.trim().toLowerCase();
-
-    if (!validateName(trimmedName)) {
-      setAuthError('Name must be at least 2 characters.');
-      return false;
-    }
-    if (!validateEmail(normalizedEmail)) {
-      setAuthError('Please enter a valid email address.');
-      return false;
-    }
-    if (!validatePassword(password)) {
-      setAuthError('Password must be at least 6 characters.');
-      return false;
-    }
-    if (password !== confirmPassword) {
-      setAuthError('Passwords do not match.');
-      return false;
-    }
-
-    const { user: newUser, error } = await signUpWithEmail(
-      trimmedName,
-      normalizedEmail,
-      password
-    );
-
-    if (error) {
-      setAuthError(error);
-      return false;
-    }
-
-    setUser(newUser);
-    if (newUser) {
-      setVisits([]);
-    }
-    return true;
-  }, []);
-
-  const logout = useCallback(async () => {
+  // 3. Add New Visit (Attaching Current User ID)
+  const addVisit = async (visitData) => {
+    if (!user) return;
     try {
-      await signOutUser();
-    } catch {
-      setAuthError('Failed to sign out. Please try again.');
+      const newEntry = {
+        ...visitData,
+        user_id: user.id, // 👈 Ensures data stays private to this user
+      };
+
+      const { data, error } = await supabase
+        .from('visits')
+        .insert([newEntry])
+        .select();
+
+      if (error) throw error;
+      if (data) {
+        setVisits((prev) => [data[0], ...prev]);
+      }
+    } catch (err) {
+      console.error('Error adding visit:', err.message);
+    }
+  };
+
+  // 4. Sign Up Function
+  const signup = async (name, email, password, confirmPassword) => {
+    setAuthError('');
+    if (password !== confirmPassword) {
+      setAuthError('Passwords do not match');
       return;
     }
-    setUser(null);
-    setVisits([]);
-    setSearchQuery('');
-    setAuthError('');
-  }, []);
-
-  const addVisit = useCallback(
-    async (visitData) => {
-      try {
-        const newVisit = await createVisit(visitData);
-        if (newVisit) {
-          setVisits((prev) => [newVisit, ...prev]);
-        }
-        return true;
-      } catch (err) {
-        console.error('Save failed in context:', err);
-        setAuthError('Failed to save visit. Please try again.');
-        return false;
-      }
-    },
-    []
-  );
-
-  const deleteVisit = useCallback(async (visitId) => {
-    if (!visitId) return;
     try {
-      await deleteVisitById(visitId);
-      setVisits((prev) => prev.filter((v) => v.id !== visitId));
-      setAuthError('');
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: name },
+        },
+      });
+      if (error) throw error;
     } catch (err) {
-      console.error('Delete failed:', err);
-      setAuthError('Failed to delete visit from cloud database. Please try again.');
+      setAuthError(err.message);
     }
-  }, []);
+  };
 
-  const value = useMemo(
-    () => ({
-      user,
-      isAuthenticated: Boolean(user),
-      authLoading,
-      visitsLoading,
-      authError,
-      setAuthError,
-      login,
-      signup,
-      logout,
-      visits,
-      filteredVisits,
-      summary,
-      searchQuery,
-      setSearchQuery,
-      addVisit,
-      createVisit: addVisit,
-      deleteVisit,
-      updateProfileAvatar,
-    }),
-    [
-      user,
-      authLoading,
-      visitsLoading,
-      authError,
-      login,
-      signup,
-      logout,
-      visits,
-      filteredVisits,
-      summary,
-      searchQuery,
-      addVisit,
-      deleteVisit,
-      updateProfileAvatar,
-    ]
+  // 5. Login Function
+  const login = async (email, password) => {
+    setAuthError('');
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+    } catch (err) {
+      setAuthError(err.message);
+    }
+  };
+
+  // 6. Logout Function (Clears State)
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setVisits([]); // 👈 Clear data on logout
+    localStorage.clear(); // 👈 Clear local storage
+  };
+
+  return (
+    <AppContext.Provider
+      value={{
+        user,
+        visits,
+        loading,
+        authError,
+        setAuthError,
+        login,
+        signup,
+        logout,
+        addVisit,
+        fetchVisits,
+      }}
+    >
+      {children}
+    </AppContext.Provider>
   );
-
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-export function useApp() {
-  const context = useContext(AppContext);
-  if (!context) {
-    throw new Error('useApp must be used within AppProvider');
-  }
-  return context;
-}
+export const useApp = () => useContext(AppContext);
