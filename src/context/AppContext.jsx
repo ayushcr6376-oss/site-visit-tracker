@@ -78,7 +78,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Bulletproof Presentation Signup (Catches 422 and executes Direct Login)
+  // 4. Smart Zero-Error Sign Up Function
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
@@ -92,42 +92,60 @@ export function AppProvider({ children }) {
       return;
     }
 
+    if (password.length < 6) {
+      setAuthError('Password must be at least 6 characters long');
+      return;
+    }
+
     const cleanEmail = email.trim().toLowerCase();
 
+    // STEP A: Direct Login Attempt (To bypass 422 for already existing accounts)
+    const { data: loginData } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password: password,
+    });
+
+    if (loginData?.user) {
+      setUser(loginData.user);
+      fetchVisits(loginData.user.id);
+      return;
+    }
+
+    // STEP B: If account is brand new, execute SignUp
     try {
-      // Step A: Attempt standard Signup
-      const { data, error } = await supabase.auth.signUp({
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
       });
 
-      if (data?.session) {
-        setUser(data.session.user);
-        fetchVisits(data.session.user.id);
-        return;
-      }
+      if (signUpErr) throw signUpErr;
 
-      if (error) throw error;
+      if (signUpData?.user) {
+        setUser(signUpData.user);
+        if (signUpData?.session) {
+          fetchVisits(signUpData.user.id);
+        } else {
+          // Instant Fallback Login
+          await login(cleanEmail, password);
+        }
+      }
     } catch (err) {
-      console.warn('Signup issue encountered, executing direct login:', err);
-      // Step B: Auto-Login Trigger (Bypasses 422/Already Registered UI block)
+      // Fallback: If SignUp fails due to 422 or duplicate error, force final login
       try {
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+        const { data: finalLogin, error: finalErr } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password: password,
         });
 
-        if (loginData?.user) {
-          setUser(loginData.user);
-          fetchVisits(loginData.user.id);
+        if (finalLogin?.user) {
+          setUser(finalLogin.user);
+          fetchVisits(finalLogin.user.id);
           return;
         }
 
-        if (loginErr) {
-          setAuthError('User registration issue. Try logging in or create user in Supabase dashboard.');
-        }
+        if (finalErr) throw finalErr;
       } catch (e) {
-        setAuthError(err.message || 'Auth error');
+        setAuthError(err.message || 'Authentication error. Please check your credentials.');
       }
     }
   };
