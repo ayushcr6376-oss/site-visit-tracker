@@ -55,7 +55,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add New Visit to 'site_visits'
+  // 3. Add New Visit
   const addVisit = async (visitData) => {
     if (!user) return;
     try {
@@ -78,7 +78,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Clean & Fixed Sign Up Function (Bypasses 422 Error)
+  // 4. Bulletproof Sign Up Function with Instant Auto-Login Fallback
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
@@ -100,29 +100,51 @@ export function AppProvider({ children }) {
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      // Direct signup without payload metadata to fix 422 error
-      const { data, error } = await supabase.auth.signUp({
+      // Step A: Attempt Signup
+      const { data } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
       });
 
-      if (error) throw error;
+      // Step B: If session created instantly
+      if (data?.session) {
+        setUser(data.session.user);
+        fetchVisits(data.session.user.id);
+        return;
+      }
 
-      // Auto login execution
-      if (data?.user) {
-        await login(cleanEmail, password);
+      // Step C: User created in DB but session missed -> Direct Login execution
+      const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      });
+
+      if (loginErr) throw loginErr;
+
+      if (loginData?.user) {
+        setUser(loginData.user);
+        fetchVisits(loginData.user.id);
       }
     } catch (err) {
-      console.error('Signup Error:', err);
-      if (err.status === 422 || err.message?.includes('already registered')) {
-        try {
-          await login(cleanEmail, password);
-        } catch (loginErr) {
-          setAuthError('Account exists or validation failed. Please login directly.');
+      console.error('Auth Flow Fallback:', err);
+
+      // Final Safety Fallback: Force Login
+      try {
+        const { data: fallbackLogin, error: fbErr } = await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password: password,
+        });
+
+        if (!fbErr && fallbackLogin?.user) {
+          setUser(fallbackLogin.user);
+          fetchVisits(fallbackLogin.user.id);
+          return;
         }
-      } else {
-        setAuthError(err.message);
+      } catch (e) {
+        // Ignore fallback error
       }
+
+      setAuthError(err.message || 'Signup failed. Please try signing in.');
     }
   };
 
