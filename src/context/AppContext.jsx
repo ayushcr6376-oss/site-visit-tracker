@@ -78,7 +78,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Sign Up Function
+  // 4. Fixed Sign Up Function
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
     if (password !== confirmPassword) {
@@ -93,9 +93,28 @@ export function AppProvider({ children }) {
           data: { full_name: name },
         },
       });
+
       if (error) throw error;
+
+      // Agar session instantly mila
+      if (data?.session) {
+        setUser(data.session.user);
+        fetchVisits(data.session.user.id);
+      } else {
+        // Agar account create ho gaya, direct login execute karo
+        await login(email, password);
+      }
     } catch (err) {
-      setAuthError(err.message);
+      // Handling duplicate email gracefully
+      if (err.message.includes('already registered')) {
+        try {
+          await login(email, password);
+        } catch (loginErr) {
+          setAuthError('User already exists. Please login with your password.');
+        }
+      } else {
+        setAuthError(err.message);
+      }
     }
   };
 
@@ -103,11 +122,15 @@ export function AppProvider({ children }) {
   const login = async (email, password) => {
     setAuthError('');
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       if (error) throw error;
+      if (data?.user) {
+        setUser(data.user);
+        fetchVisits(data.user.id);
+      }
     } catch (err) {
       setAuthError(err.message);
     }
