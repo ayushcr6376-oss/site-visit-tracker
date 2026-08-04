@@ -9,24 +9,30 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Auth Listener
+  // 1. Initial Session Check & Auth State Listener
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        fetchVisits(currentUser.id);
-      } else {
-        setVisits([]);
+    const initAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+        if (currentUser) {
+          await fetchVisits(currentUser.id);
+        }
+      } catch (err) {
+        console.error('Session Init Error:', err);
+      } finally {
         setLoading(false);
       }
-    });
+    };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (currentUser) {
-        fetchVisits(currentUser.id);
+        await fetchVisits(currentUser.id);
       } else {
         setVisits([]);
         setLoading(false);
@@ -46,10 +52,10 @@ export function AppProvider({ children }) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setVisits(data || []);
+      if (error) console.error('Error fetching site_visits:', error.message);
+      else setVisits(data || []);
     } catch (err) {
-      console.error('Error fetching site_visits:', err.message);
+      console.error('Visits Fetch Catch Error:', err);
     } finally {
       setLoading(false);
     }
@@ -70,37 +76,70 @@ export function AppProvider({ children }) {
         .select();
 
       if (error) throw error;
-      if (data) {
-        setVisits((prev) => [data[0], ...prev]);
-      }
+      if (data) setVisits((prev) => [data[0], ...prev]);
     } catch (err) {
       console.error('Error adding site_visit:', err.message);
     }
   };
 
-  // 4. Fixed Non-Blocking Sign Up
-  const signup = async (name, email, password, confirmPassword) => {
+  // 4. Clean Login Function
+  const login = async (email, password) => {
     setAuthError('');
+    setLoading(true);
 
     if (!email || !password) {
-      setAuthError('Please fill in all required fields');
+      setAuthError('Please enter both email and password.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
+        setUser(data.user);
+        await fetchVisits(data.user.id);
+      }
+    } catch (err) {
+      console.error('Login Failed:', err);
+      setAuthError(err.message || 'Login failed. Check your email and password.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 5. Clean Signup Function
+  const signup = async (name, email, password, confirmPassword) => {
+    setAuthError('');
+    setLoading(true);
+
+    if (!email || !password) {
+      setAuthError('Please fill in all required fields.');
+      setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
-      setAuthError('Passwords do not match');
+      setAuthError('Passwords do not match.');
+      setLoading(false);
       return;
     }
 
     if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters long');
+      setAuthError('Password must be at least 6 characters long.');
+      setLoading(false);
       return;
     }
 
     const cleanEmail = email.trim().toLowerCase();
 
     try {
-      // Direct SignUp attempt
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: password,
@@ -110,62 +149,30 @@ export function AppProvider({ children }) {
 
       if (data?.session) {
         setUser(data.session.user);
-        fetchVisits(data.session.user.id);
+        await fetchVisits(data.session.user.id);
       } else if (data?.user) {
-        // If user created without session, attempt fast login
-        const { data: loginData } = await supabase.auth.signInWithPassword({
+        // Direct attempt to login after signup
+        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
           password: password,
         });
 
         if (loginData?.user) {
           setUser(loginData.user);
-          fetchVisits(loginData.user.id);
+          await fetchVisits(loginData.user.id);
         } else {
-          setAuthError('Account created! Please switch to Sign In tab and log in.');
+          setAuthError('Account created! Please switch to Sign In and log in.');
         }
       }
     } catch (err) {
-      console.error('Signup error:', err);
+      console.error('Signup Failed:', err);
       if (err.message?.includes('already registered')) {
-        // If already exists, try logging in
-        try {
-          const { data: loginData } = await supabase.auth.signInWithPassword({
-            email: cleanEmail,
-            password: password,
-          });
-
-          if (loginData?.user) {
-            setUser(loginData.user);
-            fetchVisits(loginData.user.id);
-            return;
-          }
-        } catch (e) {
-          // ignore
-        }
-        setAuthError('Account already exists. Please use Sign In.');
+        setAuthError('Account already exists. Please go to Sign In tab.');
       } else {
-        setAuthError(err.message || 'Signup failed');
+        setAuthError(err.message || 'Signup failed.');
       }
-    }
-  };
-
-  // 5. Login Function
-  const login = async (email, password) => {
-    setAuthError('');
-    try {
-      const cleanEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
-      if (error) throw error;
-      if (data?.user) {
-        setUser(data.user);
-        fetchVisits(data.user.id);
-      }
-    } catch (err) {
-      setAuthError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
