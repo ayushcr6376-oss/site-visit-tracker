@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../auth'; // Directly linking helper!
 
 const AppContext = createContext();
 
@@ -9,53 +10,67 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Auth State Listener
+  // 1. Initial Session Check & Centralized Auth State Listener
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
-        if (currentUser) {
-          await fetchVisits(currentUser.id);
-        }
-      } catch (err) {
-        console.error('Session Init Error:', err);
-      } finally {
+    let mounted = true;
+
+    // Get initial session safely
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        const mappedUser = mapSessionToUser(session);
+        setUser(mappedUser);
+        fetchVisits(session.user.id);
+      } else {
+        setUser(null);
+        setVisits([]);
         setLoading(false);
       }
-    };
+    }).catch(err => {
+      console.error('Session Init Error:', err);
+      if (mounted) setLoading(false);
+    });
 
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser) {
-        await fetchVisits(currentUser.id);
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session?.user) {
+        const mappedUser = mapSessionToUser(session);
+        setUser(mappedUser);
+        fetchVisits(session.user.id);
       } else {
+        setUser(null);
         setVisits([]);
         setLoading(false);
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // 2. Fetch Visits
+  // 2. Fetch Visits (Without breaking global loading state)
   const fetchVisits = async (userId) => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('site_visits')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) console.error('Error fetching site_visits:', error.message);
-      else setVisits(data || []);
+      if (error) {
+        console.error('Error fetching site_visits:', error.message);
+      } else {
+        setVisits(data || []);
+      }
     } catch (err) {
-      console.error('Visits Fetch Catch Error:', err);
+      console.error('Visits Fetch Error:', err);
     } finally {
       setLoading(false);
     }
@@ -82,105 +97,63 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Clean Login Function
+  // 4. Clean Login Handler
   const login = async (email, password) => {
     setAuthError('');
     setLoading(true);
 
-    if (!email || !password) {
-      setAuthError('Please enter both email and password.');
+    const { user: authUser, error } = await signInWithEmail(email, password);
+
+    if (error) {
+      setAuthError(error);
       setLoading(false);
-      return;
-    }
-
-    try {
-      const cleanEmail = email.trim().toLowerCase();
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password,
-      });
-
-      if (error) throw error;
-
-      if (data?.user) {
-        setUser(data.user);
-        await fetchVisits(data.user.id);
-      }
-    } catch (err) {
-      console.error('Login Failed:', err);
-      setAuthError(err.message || 'Login failed. Check your email and password.');
-    } finally {
-      setLoading(false);
+    } else if (authUser) {
+      setUser(authUser);
+      await fetchVisits(authUser.id);
     }
   };
 
-  // 5. Clean Signup Function
+  // 5. Clean Signup Handler
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
-    setLoading(true);
 
-    if (!email || !password) {
+    if (!name || !email || !password) {
       setAuthError('Please fill in all required fields.');
-      setLoading(false);
       return;
     }
 
     if (password !== confirmPassword) {
       setAuthError('Passwords do not match.');
-      setLoading(false);
       return;
     }
 
     if (password.length < 6) {
       setAuthError('Password must be at least 6 characters long.');
-      setLoading(false);
       return;
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    setLoading(true);
 
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: password,
-      });
+    const { user: authUser, error } = await signUpWithEmail(name, email, password);
 
-      if (error) throw error;
-
-      if (data?.session) {
-        setUser(data.session.user);
-        await fetchVisits(data.session.user.id);
-      } else if (data?.user) {
-        // Direct attempt to login after signup
-        const { data: loginData, error: loginErr } = await supabase.auth.signInWithPassword({
-          email: cleanEmail,
-          password: password,
-        });
-
-        if (loginData?.user) {
-          setUser(loginData.user);
-          await fetchVisits(loginData.user.id);
-        } else {
-          setAuthError('Account created! Please switch to Sign In and log in.');
-        }
-      }
-    } catch (err) {
-      console.error('Signup Failed:', err);
-      if (err.message?.includes('already registered')) {
-        setAuthError('Account already exists. Please go to Sign In tab.');
-      } else {
-        setAuthError(err.message || 'Signup failed.');
-      }
-    } finally {
+    if (error) {
+      setAuthError(error);
+      setLoading(false);
+    } else if (authUser) {
+      setUser(authUser);
+      await fetchVisits(authUser.id);
+    } else {
       setLoading(false);
     }
   };
 
-  // 6. Logout
+  // 6. Logout Handler
   const logout = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
     setUser(null);
     setVisits([]);
+    setLoading(false);
     localStorage.clear();
   };
 
