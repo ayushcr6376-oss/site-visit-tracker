@@ -29,10 +29,11 @@ function LanguageSwitcher() {
 }
 
 function AppContent() {
-  const { isAuthenticated, authLoading } = useApp();
+  // Correct state names from AppContext (user & loading)
+  const { user, loading } = useApp();
   const [isMounted, setIsMounted] = useState(false);
 
-  // Hydration errors se bachne ke liye
+  // Hydration handling
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -45,7 +46,7 @@ function AppContent() {
     );
   }
 
-  if (authLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-4">
@@ -56,10 +57,11 @@ function AppContent() {
     );
   }
 
+  // Check if 'user' object exists
   return (
     <>
       <LanguageSwitcher />
-      {!isAuthenticated ? <AuthScreen /> : <Dashboard />}
+      {!user ? <AuthScreen /> : <Dashboard />}
     </>
   );
 }
