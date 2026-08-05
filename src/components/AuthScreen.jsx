@@ -14,7 +14,7 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isHindi = i18n.language && i18n.language.startsWith('hi');
 
@@ -25,14 +25,24 @@ export default function Auth() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (isSubmitting) return;
 
-    if (isSignUp) {
-      await signup(name, email, password, confirmPassword);
-    } else {
-      await login(email, password);
+    setIsSubmitting(true);
+    setAuthError('');
+
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+
+      if (isSignUp) {
+        await signup(name.trim(), cleanEmail, password, confirmPassword);
+      } else {
+        await login(cleanEmail, password);
+      }
+    } catch (err) {
+      console.error("Form Submit Error:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -136,10 +146,10 @@ export default function Auth() {
           {/* Submit Button */}
           <button
             type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition-all text-sm shadow"
+            disabled={isSubmitting}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 rounded-lg transition-all text-sm shadow cursor-pointer"
           >
-            {loading
+            {isSubmitting
               ? isHindi
                 ? 'कृपया प्रतीक्षा करें...'
                 : 'Please wait...'
@@ -153,7 +163,7 @@ export default function Auth() {
           </button>
         </form>
 
-        {/* 🔄 TOGGLE BETWEEN SIGN IN AND SIGN UP */}
+        {/* TOGGLE BETWEEN SIGN IN AND SIGN UP */}
         <div className="text-center pt-2 border-t">
           <p className="text-xs text-slate-600">
             {isSignUp ? (
