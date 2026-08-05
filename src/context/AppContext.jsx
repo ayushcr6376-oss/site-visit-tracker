@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../auth'; // Directly linking helper!
 
 const AppContext = createContext();
 
@@ -10,114 +9,99 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Centralized Auth State Listener
+  // 1. Independent Auth State Listener
   useEffect(() => {
-    let mounted = true;
-
-    // Get initial session safely
+    // Initial Session Check
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        const mappedUser = mapSessionToUser(session);
-        setUser(mappedUser);
-        fetchVisits(session.user.id);
-      } else {
-        setUser(null);
-        setVisits([]);
-        setLoading(false);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setLoading(false);
+      if (currentUser) {
+        fetchVisits(currentUser.id);
       }
-    }).catch(err => {
-      console.error('Session Init Error:', err);
-      if (mounted) setLoading(false);
+    }).catch((err) => {
+      console.error('Session error:', err);
+      setLoading(false);
     });
 
-    // Listen for auth state changes
+    // Real-time Auth Subscription
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
-      if (session?.user) {
-        const mappedUser = mapSessionToUser(session);
-        setUser(mappedUser);
-        fetchVisits(session.user.id);
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setLoading(false);
+      if (currentUser) {
+        fetchVisits(currentUser.id);
       } else {
-        setUser(null);
         setVisits([]);
-        setLoading(false);
       }
     });
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
-  // 2. Fetch Visits (Without breaking global loading state)
+  // 2. Fetch Visits (Fail-safe, will never block Auth)
   const fetchVisits = async (userId) => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
     try {
       const { data, error } = await supabase
         .from('site_visits')
         .select('*')
-        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('Error fetching site_visits:', error.message);
-      } else {
-        setVisits(data || []);
+      if (!error && data) {
+        setVisits(data);
       }
     } catch (err) {
-      console.error('Visits Fetch Error:', err);
-    } finally {
-      setLoading(false);
+      console.error('Error fetching visits:', err);
     }
   };
 
   // 3. Add Visit
   const addVisit = async (visitData) => {
-    if (!user) return;
     try {
-      const newEntry = {
-        ...visitData,
-        user_id: user.id,
-      };
-
+      const newEntry = user ? { ...visitData, user_id: user.id } : visitData;
       const { data, error } = await supabase
         .from('site_visits')
         .insert([newEntry])
         .select();
 
-      if (error) throw error;
-      if (data) setVisits((prev) => [data[0], ...prev]);
+      if (!error && data) {
+        setVisits((prev) => [data[0], ...prev]);
+      }
     } catch (err) {
-      console.error('Error adding site_visit:', err.message);
+      console.error('Error adding visit:', err);
     }
   };
 
-  // 4. Clean Login Handler
+  // 4. Pure Direct Login
   const login = async (email, password) => {
     setAuthError('');
     setLoading(true);
 
-    const { user: authUser, error } = await signInWithEmail(email, password);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password,
+      });
 
-    if (error) {
-      setAuthError(error);
+      if (error) throw error;
+
+      if (data?.user) {
+        setUser(data.user);
+        fetchVisits(data.user.id);
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Login failed.');
+    } finally {
       setLoading(false);
-    } else if (authUser) {
-      setUser(authUser);
-      await fetchVisits(authUser.id);
     }
   };
 
-  // 5. Clean Signup Handler
+  // 5. Pure Direct Signup
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
-    if (!name || !email || !password) {
+    if (!email || !password) {
       setAuthError('Please fill in all required fields.');
       return;
     }
@@ -128,26 +112,40 @@ export function AppProvider({ children }) {
     }
 
     if (password.length < 6) {
-      setAuthError('Password must be at least 6 characters long.');
+      setAuthError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
 
-    const { user: authUser, error } = await signUpWithEmail(name, email, password);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: { name: name?.trim() || 'User' }
+        }
+      });
 
-    if (error) {
-      setAuthError(error);
-      setLoading(false);
-    } else if (authUser) {
-      setUser(authUser);
-      await fetchVisits(authUser.id);
-    } else {
+      if (error) throw error;
+
+      if (data?.user) {
+        setUser(data.user);
+        if (data?.session) {
+          fetchVisits(data.user.id);
+        } else {
+          setAuthError('Registration successful! Please sign in.');
+        }
+      }
+    } catch (err) {
+      setAuthError(err.message || 'Signup failed.');
+    } finally {
       setLoading(false);
     }
   };
 
-  // 6. Logout Handler
+  // 6. Direct Logout
   const logout = async () => {
     setLoading(true);
     await supabase.auth.signOut();
