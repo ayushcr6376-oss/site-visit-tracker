@@ -33,13 +33,11 @@ function AppContent() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    // 1. Check initial active session directly from Supabase client
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSessionUser(session?.user || user || null);
       setChecking(false);
     });
 
-    // 2. Real-time session listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSessionUser(session?.user || null);
       setChecking(false);

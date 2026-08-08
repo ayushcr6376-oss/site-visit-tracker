@@ -2,14 +2,11 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApp } from '../context/AppContext';
 
-export default function Auth() {
-  const { t, i18n } = useTranslation();
+export default function AuthScreen() {
+  const { i18n } = useTranslation();
   const { login, signup, authError, setAuthError } = useApp();
 
-  // Mode state: 'login' ya 'signup'
   const [isSignUp, setIsSignUp] = useState(false);
-
-  // Form inputs
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -20,7 +17,7 @@ export default function Auth() {
 
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
-    setAuthError(''); // Clear previous errors on toggle
+    setAuthError('');
   };
 
   const handleSubmit = async (e) => {
@@ -48,38 +45,26 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
       <div className="bg-white p-8 rounded-xl shadow-lg border border-slate-200 w-full max-w-md space-y-6">
-        {/* Header */}
         <div className="text-center space-y-2">
           <h1 className="text-2xl font-bold text-slate-900">
             {isSignUp
-              ? isHindi
-                ? 'नया खाता बनाएं'
-                : 'Create an Account'
-              : isHindi
-              ? 'साइन इन करें'
-              : 'Sign In'}
+              ? isHindi ? 'नया खाता बनाएं' : 'Create an Account'
+              : isHindi ? 'साइन इन करें' : 'Sign In'}
           </h1>
           <p className="text-sm text-slate-500">
             {isSignUp
-              ? isHindi
-                ? 'साइट विजिट ट्रैकर में आपका स्वागत है'
-                : 'Enter your details to register'
-              : isHindi
-              ? 'अपने खाते में प्रवेश करें'
-              : 'Enter your email & password to sign in'}
+              ? isHindi ? 'साइट विजिट ट्रैकर में आपका स्वागत है' : 'Enter your details to register'
+              : isHindi ? 'अपने खाते में प्रवेश करें' : 'Enter your email & password to sign in'}
           </p>
         </div>
 
-        {/* Error Alert */}
         {authError && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200 text-center">
+          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm border border-red-200 text-center font-medium">
             {authError}
           </div>
         )}
 
-        {/* Auth Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name Field (Only shown in Sign Up mode) */}
           {isSignUp && (
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -91,12 +76,11 @@ export default function Auth() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={isHindi ? 'अपना नाम दर्ज करें' : 'Enter your name'}
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           )}
 
-          {/* Email Field */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
               {isHindi ? 'ईमेल' : 'Email Address'}
@@ -107,11 +91,10 @@ export default function Auth() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="example@gmail.com"
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* Password Field */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
               {isHindi ? 'पासवर्ड' : 'Password'}
@@ -122,11 +105,10 @@ export default function Auth() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
-          {/* Confirm Password Field (Only shown in Sign Up mode) */}
           {isSignUp && (
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">
@@ -138,32 +120,24 @@ export default function Auth() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           )}
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 rounded-lg transition-all text-sm shadow cursor-pointer"
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2.5 rounded-lg text-sm shadow transition-all cursor-pointer"
           >
             {isSubmitting
-              ? isHindi
-                ? 'कृपया प्रतीक्षा करें...'
-                : 'Please wait...'
+              ? isHindi ? 'कृपया प्रतीक्षा करें...' : 'Please wait...'
               : isSignUp
-              ? isHindi
-                ? 'अकाउंट बनाएं'
-                : 'Sign Up'
-              : isHindi
-              ? 'साइन इन करें'
-              : 'Sign In'}
+              ? isHindi ? 'अकाउंट बनाएं' : 'Sign Up'
+              : isHindi ? 'साइन इन करें' : 'Sign In'}
           </button>
         </form>
 
-        {/* TOGGLE BETWEEN SIGN IN AND SIGN UP */}
         <div className="text-center pt-2 border-t">
           <p className="text-xs text-slate-600">
             {isSignUp ? (

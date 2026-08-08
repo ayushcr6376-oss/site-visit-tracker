@@ -10,7 +10,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Realtime Listener
+  // 1. Initial Session Check & Realtime Auth Listener
   useEffect(() => {
     let mounted = true;
 
@@ -49,7 +49,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits (Isolated & Safe Async)
+  // 2. Fetch Visits
   const fetchVisits = async (userId) => {
     if (!userId) {
       setLoading(false);
@@ -89,7 +89,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Clean Login Handler
+  // 4. Login Function
   const login = async (email, password) => {
     setAuthError('');
 
@@ -104,11 +104,10 @@ export function AppProvider({ children }) {
       setAuthError(error);
     } else if (authUser) {
       setUser(authUser);
-      await fetchVisits(authUser.id);
     }
   };
 
-  // 5. Clean Signup Handler
+  // 5. Signup Function
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
 
@@ -133,11 +132,10 @@ export function AppProvider({ children }) {
       setAuthError(error);
     } else if (authUser) {
       setUser(authUser);
-      await fetchVisits(authUser.id);
     }
   };
 
-  // 6. Logout Handler
+  // 6. Logout Function
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
