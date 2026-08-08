@@ -3,14 +3,13 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AppProvider, useApp } from './context/AppContext';
+import { supabase } from './supabase';
 
-// Clean and safe imports for Vercel
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
 
 function LanguageSwitcher() {
   const { i18n } = useTranslation();
-
   const isHindi = i18n.language && i18n.language.startsWith('hi');
 
   const toggleLanguage = () => {
@@ -29,16 +28,26 @@ function LanguageSwitcher() {
 }
 
 function AppContent() {
-  // Correct state names from AppContext (user & loading)
-  const { user, loading } = useApp();
-  const [isMounted, setIsMounted] = useState(false);
+  const { user } = useApp();
+  const [sessionUser, setSessionUser] = useState(null);
+  const [checking, setChecking] = useState(true);
 
-  // Hydration handling
   useEffect(() => {
-    setIsMounted(true);
-  }, []);
+    // Direct Active Session Check from Supabase Client
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSessionUser(session?.user || user || null);
+      setChecking(false);
+    });
 
-  if (!isMounted) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user || null);
+      setChecking(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [user]);
+
+  if (checking) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-blue-600 animate-spin" />
@@ -46,22 +55,13 @@ function AppContent() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-10 h-10 rounded-full border-2 border-slate-200 border-t-blue-600 animate-spin" role="status" aria-label="Loading" />
-          <p className="text-sm text-slate-500">Loading session…</p>
-        </div>
-      </div>
-    );
-  }
+  // Active user standard check
+  const activeUser = user || sessionUser;
 
-  // Check if 'user' object exists
   return (
     <>
       <LanguageSwitcher />
-      {!user ? <AuthScreen /> : <Dashboard />}
+      {!activeUser ? <AuthScreen /> : <Dashboard />}
     </>
   );
 }
