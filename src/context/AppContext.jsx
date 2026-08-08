@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../auth';
+// ✅ Path fixed to '../utils/auth' to solve Vercel build crash
+import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../utils/auth';
 
 const AppContext = createContext();
 
@@ -10,7 +11,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Realtime Auth Listener
+  // 1. Session Check & Listener
   useEffect(() => {
     let mounted = true;
 
@@ -135,7 +136,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Logout Function
+  // 6. Logout
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
