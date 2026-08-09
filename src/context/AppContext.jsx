@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../supabase';
-// ✅ Path fixed to '../utils/auth' to solve Vercel build crash
+// ✅ Path fixed to '../utils/auth' to fix Vercel build crash
 import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../utils/auth';
 
 const AppContext = createContext();
@@ -11,7 +11,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Session Check & Listener
+  // 1. Initial Session Check & Realtime Auth Listener
   useEffect(() => {
     let mounted = true;
 
@@ -74,19 +74,30 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit
+  // 3. Add Visit (Updated to handle insert properly and fetch fresh list)
   const addVisit = async (visitData) => {
     try {
       const newEntry = user ? { ...visitData, user_id: user.id } : visitData;
+      
       const { data, error } = await supabase
         .from('site_visits')
         .insert([newEntry])
         .select();
 
-      if (error) throw error;
-      if (data) setVisits((prev) => [data[0], ...prev]);
+      if (error) {
+        console.error('Error adding site_visit:', error.message);
+        throw error;
+      }
+
+      if (data && data.length > 0) {
+        setVisits((prev) => [data[0], ...prev]);
+      } else if (user?.id) {
+        fetchVisits(user.id);
+      }
+      return { success: true };
     } catch (err) {
-      console.error('Error adding site_visit:', err.message);
+      console.error('Error in addVisit:', err);
+      throw err;
     }
   };
 
@@ -136,7 +147,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 6. Logout
+  // 6. Logout Function
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
