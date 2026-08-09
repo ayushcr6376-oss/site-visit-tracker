@@ -50,7 +50,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits (Maps all DB variations safely to UI)
+  // 2. Fetch Visits with Universal Field Fallbacks
   const fetchVisits = async () => {
     try {
       const { data, error } = await supabase
@@ -63,21 +63,13 @@ export function AppProvider({ children }) {
       } else {
         const mapped = (data || []).map((row) => ({
           id: row.id,
-          // Date mapping
           visitDate: row.visit_date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-          // Company / Site Name mapping
-          clientCompany: row.client_company || row.site_name || 'Site Visit',
+          clientCompany: row.client_company || row.site_name || 'Industrial Site',
           parentCompany: row.parent_company || row.manager_name || '',
           visitType: row.visit_type || 'Site Visit',
-          // Key Task mapping
           keyTask: row.key_task || row.keyTask || row.purpose || 'No tasks logged.',
-          // IN / OUT Time mapping
-          inTime: row.check_in || row.in_time || row.inTime || '—',
-          outTime: row.check_out || row.out_time || row.outTime || '—',
-          // Duration
-          durationHours: Number(row.duration_hours || 0),
-          durationMinutes: Number(row.duration_minutes || 0),
-          // Payout & Status
+          inTime: row.in_time || row.inTime || row.check_in || '—',
+          outTime: row.out_time || row.outTime || row.check_out || '—',
           payoutAmount: Number(row.payout_amount || row.payoutAmount || 0),
           status: row.status || 'PAID',
           signature: row.signature || null,
@@ -92,22 +84,22 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit (Saves both camelCase and snake_case for 100% DB match)
+  // 3. Add Visit (Saves both Naming Formats so DB never fails)
   const addVisit = async (visitData) => {
     try {
       const newEntry = {
-        user_id: user?.id,
-        site_name: visitData.clientCompany || visitData.site_name || 'Site Visit',
-        client_company: visitData.clientCompany || visitData.site_name,
-        parent_company: visitData.parentCompany || '',
-        key_task: visitData.keyTask || visitData.purpose,
-        keyTask: visitData.keyTask || visitData.purpose,
-        check_in: visitData.inTime || visitData.check_in || visitData.checkIn,
-        check_out: visitData.outTime || visitData.check_out || visitData.checkOut,
-        in_time: visitData.inTime || visitData.check_in,
-        out_time: visitData.outTime || visitData.check_out,
-        duration_hours: Number(visitData.durationHours || 0),
-        duration_minutes: Number(visitData.durationMinutes || 0),
+        user_id: user?.id || null,
+        site_name: visitData.clientCompany || visitData.site_name || 'Industrial Site',
+        client_company: visitData.clientCompany || visitData.site_name || 'Industrial Site',
+        parent_company: visitData.parentCompany || visitData.manager_name || '',
+        manager_name: visitData.parentCompany || visitData.manager_name || '',
+        purpose: visitData.keyTask || visitData.purpose || '',
+        key_task: visitData.keyTask || visitData.purpose || '',
+        keyTask: visitData.keyTask || visitData.purpose || '',
+        check_in: visitData.inTime || visitData.check_in || '—',
+        check_out: visitData.outTime || visitData.check_out || '—',
+        in_time: visitData.inTime || visitData.check_in || '—',
+        out_time: visitData.outTime || visitData.check_out || '—',
         payout_amount: Number(visitData.payoutAmount || 0),
         payoutAmount: Number(visitData.payoutAmount || 0),
         visit_type: visitData.visitType || 'Site Visit',
@@ -145,7 +137,7 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 5. Filtered Visits for Search
+  // 5. Filtered Visits Search
   const filteredVisits = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return visits;
