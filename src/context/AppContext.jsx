@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { supabase } from '../supabase';
-// ✅ Path fixed to '../utils/auth' to fix Vercel build crash
 import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../utils/auth';
 
 const AppContext = createContext();
@@ -8,10 +7,11 @@ const AppContext = createContext();
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
   const [visits, setVisits] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Initial Session Check & Realtime Auth Listener
+  // 1. Session Check & Listener
   useEffect(() => {
     let mounted = true;
 
@@ -20,7 +20,7 @@ export function AppProvider({ children }) {
       if (session?.user) {
         const mappedUser = mapSessionToUser(session);
         setUser(mappedUser);
-        fetchVisits(session.user.id);
+        fetchVisits();
       } else {
         setUser(null);
         setVisits([]);
@@ -36,7 +36,7 @@ export function AppProvider({ children }) {
       if (session?.user) {
         const mappedUser = mapSessionToUser(session);
         setUser(mappedUser);
-        fetchVisits(session.user.id);
+        fetchVisits();
       } else {
         setUser(null);
         setVisits([]);
@@ -50,12 +50,8 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits
-  const fetchVisits = async (userId) => {
-    if (!userId) {
-      setLoading(false);
-      return;
-    }
+  // 2. Fetch Visits (Fetches all visits for current user/all)
+  const fetchVisits = async () => {
     try {
       const { data, error } = await supabase
         .from('site_visits')
@@ -65,7 +61,20 @@ export function AppProvider({ children }) {
       if (error) {
         console.error('Error fetching site_visits:', error.message);
       } else {
-        setVisits(data || []);
+        // Map database row keys to UI model keys cleanly
+        const mapped = (data || []).map((row) => ({
+          id: row.id,
+          visitDate: row.visit_date || row.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
+          clientCompany: row.client_company || row.site_name || 'N/A',
+          parentCompany: row.parent_company || row.manager_name || '',
+          visitType: row.visit_type || 'Site Visit',
+          keyTask: row.key_task || row.keyTask || row.purpose || 'No tasks logged.',
+          payoutAmount: Number(row.payout_amount || row.payoutAmount || 0),
+          status: row.status || 'PENDING',
+          signature: row.signature || null,
+          createdAt: row.created_at,
+        }));
+        setVisits(mapped);
       }
     } catch (err) {
       console.error('Visits Fetch Catch Error:', err);
@@ -74,11 +83,22 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit (Updated to handle insert properly and fetch fresh list)
+  // 3. Add Visit
   const addVisit = async (visitData) => {
     try {
-      const newEntry = user ? { ...visitData, user_id: user.id } : visitData;
-      
+      const newEntry = {
+        user_id: user?.id,
+        site_name: visitData.clientCompany || visitData.site_name,
+        client_company: visitData.clientCompany,
+        parent_company: visitData.parentCompany,
+        key_task: visitData.keyTask,
+        visit_type: visitData.visitType,
+        payout_amount: visitData.payoutAmount,
+        status: visitData.status || 'PENDING',
+        visit_date: visitData.visitDate,
+        signature: visitData.signature || null,
+      };
+
       const { data, error } = await supabase
         .from('site_visits')
         .insert([newEntry])
@@ -89,11 +109,7 @@ export function AppProvider({ children }) {
         throw error;
       }
 
-      if (data && data.length > 0) {
-        setVisits((prev) => [data[0], ...prev]);
-      } else if (user?.id) {
-        fetchVisits(user.id);
-      }
+      await fetchVisits();
       return { success: true };
     } catch (err) {
       console.error('Error in addVisit:', err);
@@ -101,53 +117,69 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Login Function
+  // 4. Delete Visit
+  const deleteVisit = async (visitId) => {
+    try {
+      const { error } = await supabase.from('site_visits').delete().eq('id', visitId);
+      if (error) throw error;
+      setVisits((prev) => prev.filter((v) => v.id !== visitId));
+    } catch (err) {
+      console.error('Error deleting visit:', err.message);
+    }
+  };
+
+  // 5. Filtered Visits for Search
+  const filteredVisits = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return visits;
+    return visits.filter((v) =>
+      [v.clientCompany, v.parentCompany, v.keyTask, v.visitType, v.status]
+        .join(' ')
+        .toLowerCase()
+        .includes(query)
+    );
+  }, [visits, searchQuery]);
+
+  // 6. Summary Calculator
+  const summary = useMemo(() => {
+    const totalVisits = visits.length;
+    const totalPayout = visits.reduce((acc, curr) => acc + (curr.payoutAmount || 0), 0);
+    const paidVisits = visits.filter((v) => v.status === 'PAID').length;
+    const pendingVisits = visits.filter((v) => v.status === 'PENDING').length;
+    return { totalVisits, totalPayout, paidVisits, pendingVisits };
+  }, [visits]);
+
+  // 7. Auth Functions
   const login = async (email, password) => {
     setAuthError('');
-
     if (!email || !password) {
       setAuthError('Please enter both email and password.');
       return;
     }
-
     const { user: authUser, error } = await signInWithEmail(email, password);
-
-    if (error) {
-      setAuthError(error);
-    } else if (authUser) {
-      setUser(authUser);
-    }
+    if (error) setAuthError(error);
+    else if (authUser) setUser(authUser);
   };
 
-  // 5. Signup Function
   const signup = async (name, email, password, confirmPassword) => {
     setAuthError('');
-
     if (!email || !password) {
       setAuthError('Please fill in required fields.');
       return;
     }
-
     if (password !== confirmPassword) {
       setAuthError('Passwords do not match.');
       return;
     }
-
     if (password.length < 6) {
       setAuthError('Password must be at least 6 characters.');
       return;
     }
-
     const { user: authUser, error } = await signUpWithEmail(name || 'User', email, password);
-
-    if (error) {
-      setAuthError(error);
-    } else if (authUser) {
-      setUser(authUser);
-    }
+    if (error) setAuthError(error);
+    else if (authUser) setUser(authUser);
   };
 
-  // 6. Logout Function
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -160,6 +192,10 @@ export function AppProvider({ children }) {
       value={{
         user,
         visits,
+        filteredVisits,
+        summary,
+        searchQuery,
+        setSearchQuery,
         loading,
         authError,
         setAuthError,
@@ -167,6 +203,7 @@ export function AppProvider({ children }) {
         signup,
         logout,
         addVisit,
+        deleteVisit,
         fetchVisits,
       }}
     >
