@@ -11,7 +11,6 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Session Check & Listener
   useEffect(() => {
     let mounted = true;
 
@@ -50,7 +49,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits with Universal Field Fallbacks
+  // Fetch visits with ultimate fallback for ALL naming conventions
   const fetchVisits = async () => {
     try {
       const { data, error } = await supabase
@@ -61,20 +60,30 @@ export function AppProvider({ children }) {
       if (error) {
         console.error('Error fetching site_visits:', error.message);
       } else {
-        const mapped = (data || []).map((row) => ({
-          id: row.id,
-          visitDate: row.visit_date || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
-          clientCompany: row.client_company || row.site_name || 'Industrial Site',
-          parentCompany: row.parent_company || row.manager_name || '',
-          visitType: row.visit_type || 'Site Visit',
-          keyTask: row.key_task || row.keyTask || row.purpose || 'No tasks logged.',
-          inTime: row.in_time || row.inTime || row.check_in || '—',
-          outTime: row.out_time || row.outTime || row.check_out || '—',
-          payoutAmount: Number(row.payout_amount || row.payoutAmount || 0),
-          status: row.status || 'PAID',
-          signature: row.signature || null,
-          createdAt: row.created_at,
-        }));
+        const mapped = (data || []).map((row) => {
+          // Task extraction
+          const rawTask = row.key_task || row.keyTask || row.purpose || row.task || '';
+          
+          // Payout extraction
+          const rawPayout = row.payout_amount !== undefined && row.payout_amount !== null ? row.payout_amount : 
+                            (row.payoutAmount !== undefined && row.payoutAmount !== null ? row.payoutAmount : row.payout);
+
+          return {
+            id: row.id,
+            visitDate: row.visit_date || row.visitDate || (row.created_at ? row.created_at.split('T')[0] : new Date().toISOString().split('T')[0]),
+            clientCompany: row.client_company || row.clientCompany || row.site_name || 'Industrial Site',
+            parentCompany: row.parent_company || row.parentCompany || row.manager_name || '',
+            visitType: row.visit_type || row.visitType || 'Site Visit',
+            keyTask: rawTask ? String(rawTask) : '',
+            inTime: row.in_time || row.inTime || row.check_in || '—',
+            outTime: row.out_time || row.outTime || row.check_out || '—',
+            payoutAmount: rawPayout !== undefined && rawPayout !== null ? Number(rawPayout) : 0,
+            status: row.status || 'pending',
+            signature: row.signature || null,
+            createdAt: row.created_at,
+            rawRow: row // Backup of raw DB row
+          };
+        });
         setVisits(mapped);
       }
     } catch (err) {
@@ -84,34 +93,34 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit (Saves both Naming Formats so DB never fails)
   const addVisit = async (visitData) => {
     try {
+      const taskVal = visitData.keyTask || visitData.key_task || visitData.purpose || '';
+      const payoutVal = Number(visitData.payoutAmount || visitData.payout_amount || visitData.payout || 0);
+
       const newEntry = {
         user_id: user?.id || null,
         site_name: visitData.clientCompany || visitData.site_name || 'Industrial Site',
         client_company: visitData.clientCompany || visitData.site_name || 'Industrial Site',
-        parent_company: visitData.parentCompany || visitData.manager_name || '',
-        manager_name: visitData.parentCompany || visitData.manager_name || '',
-        purpose: visitData.keyTask || visitData.purpose || '',
-        key_task: visitData.keyTask || visitData.purpose || '',
-        keyTask: visitData.keyTask || visitData.purpose || '',
+        parent_company: visitData.parentCompany || '',
+        purpose: taskVal,
+        key_task: taskVal,
+        keyTask: taskVal,
         check_in: visitData.inTime || visitData.check_in || '—',
         check_out: visitData.outTime || visitData.check_out || '—',
         in_time: visitData.inTime || visitData.check_in || '—',
         out_time: visitData.outTime || visitData.check_out || '—',
-        payout_amount: Number(visitData.payoutAmount || 0),
-        payoutAmount: Number(visitData.payoutAmount || 0),
+        payout_amount: payoutVal,
+        payoutAmount: payoutVal,
         visit_type: visitData.visitType || 'Site Visit',
-        status: visitData.status || 'PAID',
+        status: visitData.status || 'pending',
         visit_date: visitData.visitDate || new Date().toISOString().split('T')[0],
         signature: visitData.signature || null,
       };
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('site_visits')
-        .insert([newEntry])
-        .select();
+        .insert([newEntry]);
 
       if (error) {
         console.error('Error adding site_visit:', error.message);
@@ -126,7 +135,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Delete Visit
   const deleteVisit = async (visitId) => {
     try {
       const { error } = await supabase.from('site_visits').delete().eq('id', visitId);
@@ -137,7 +145,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 5. Filtered Visits Search
   const filteredVisits = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return visits;
@@ -149,16 +156,14 @@ export function AppProvider({ children }) {
     );
   }, [visits, searchQuery]);
 
-  // 6. Summary Calculator
   const summary = useMemo(() => {
     const totalVisits = visits.length;
     const totalPayout = visits.reduce((acc, curr) => acc + (curr.payoutAmount || 0), 0);
-    const paidVisits = visits.filter((v) => v.status === 'PAID').length;
-    const pendingVisits = visits.filter((v) => v.status === 'PENDING').length;
+    const paidVisits = visits.filter((v) => v.status === 'PAID' || v.status === 'completed').length;
+    const pendingVisits = visits.filter((v) => v.status === 'PENDING' || v.status === 'pending').length;
     return { totalVisits, totalPayout, paidVisits, pendingVisits };
   }, [visits]);
 
-  // 7. Auth Functions
   const login = async (email, password) => {
     setAuthError('');
     if (!email || !password) {

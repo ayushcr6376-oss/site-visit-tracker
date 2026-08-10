@@ -3,26 +3,29 @@ import { Trash2, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 export default function VisitCard({ visit, onDelete }) {
-  // Safe Fallbacks for Displaying Values
-  const siteName = visit.clientCompany || visit.site_name || visit.client_company || 'Industrial Site';
-  const parentComp = visit.parentCompany || visit.parent_company || visit.manager_name || '';
-  const dateStr = visit.visitDate || visit.visit_date || (visit.createdAt ? visit.createdAt.split('T')[0] : 'N/A');
-  
-  // Times
-  const inTime = visit.inTime || visit.check_in || visit.in_time || '—';
-  const outTime = visit.outTime || visit.check_out || visit.out_time || '—';
-  
-  // Key Task & Payout Exact Field Fallbacks
-  const keyTask = visit.keyTask || visit.key_task || visit.purpose || visit.key_tasks || 'No tasks logged.';
-  const payout = Number(visit.payoutAmount || visit.payout_amount || visit.payout || 0);
-  const status = visit.status || 'completed';
+  const raw = visit.rawRow || {};
 
-  // Single PDF Generator Function
+  // Extract task checking all sources
+  const taskText = visit.keyTask || raw.key_task || raw.keyTask || raw.purpose || raw.task || '';
+  const displayTask = taskText.trim() !== '' ? taskText : 'No tasks logged.';
+
+  // Extract payout checking all sources
+  const rawPayoutNum = visit.payoutAmount !== undefined && visit.payoutAmount !== 0 ? visit.payoutAmount :
+                       (raw.payout_amount !== undefined ? raw.payout_amount :
+                       (raw.payoutAmount !== undefined ? raw.payoutAmount : raw.payout));
+  const displayPayout = Number(rawPayoutNum || 0);
+
+  const siteName = visit.clientCompany || raw.client_company || raw.site_name || 'Industrial Site';
+  const parentComp = visit.parentCompany || raw.parent_company || raw.manager_name || '';
+  const dateStr = visit.visitDate || raw.visit_date || (visit.createdAt ? visit.createdAt.split('T')[0] : 'N/A');
+  
+  const inTime = visit.inTime || raw.in_time || raw.check_in || '—';
+  const outTime = visit.outTime || raw.out_time || raw.check_out || '—';
+  const status = visit.status || raw.status || 'pending';
+
   const handleDownloadSinglePDF = () => {
     try {
       const doc = new jsPDF();
-      
-      // Top Branding Header
       doc.setFillColor(15, 32, 67);
       doc.rect(0, 0, 210, 40, 'F');
       doc.setTextColor(255, 255, 255);
@@ -30,7 +33,6 @@ export default function VisitCard({ visit, onDelete }) {
       doc.setFontSize(20);
       doc.text('INDUSTRIAL SITE VISIT REPORT', 15, 25);
 
-      // Main Details
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(11);
       doc.setTextColor(51, 65, 85);
@@ -50,27 +52,24 @@ export default function VisitCard({ visit, onDelete }) {
       addRow('Status', status.toUpperCase());
       addRow('IN Time', inTime);
       addRow('OUT Time', outTime);
-      addRow('Payout Amount', `INR ${payout.toLocaleString('en-IN')}`);
+      addRow('Payout Amount', `INR ${displayPayout.toLocaleString('en-IN')}`);
 
-      // Key Task Box
       currentY += 5;
       doc.setFillColor(248, 250, 252);
       doc.rect(15, currentY, 180, 40, 'F');
       doc.setFont('helvetica', 'bold');
       doc.text('Key Task Executed:', 20, currentY + 10);
       doc.setFont('helvetica', 'normal');
-      const splitTasks = doc.splitTextToSize(keyTask, 170);
+      const splitTasks = doc.splitTextToSize(displayTask, 170);
       doc.text(splitTasks, 20, currentY + 22);
 
-      // Signature (If available)
-      if (visit.signature) {
+      if (visit.signature || raw.signature) {
         currentY += 50;
         doc.setFont('helvetica', 'bold');
         doc.text('Client / Manager Signature:', 15, currentY);
-        doc.addImage(visit.signature, 'PNG', 15, currentY + 5, 50, 22);
+        doc.addImage(visit.signature || raw.signature, 'PNG', 15, currentY + 5, 50, 22);
       }
 
-      // Save PDF with Site Name
       doc.save(`Visit_Report_${siteName.replace(/\s+/g, '_')}_${dateStr}.pdf`);
     } catch (err) {
       console.error('Error generating single PDF:', err);
@@ -80,7 +79,6 @@ export default function VisitCard({ visit, onDelete }) {
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-4 hover:shadow-md transition-shadow">
-      {/* Header Info */}
       <div className="flex justify-between items-start mb-4 border-b border-slate-100 pb-3">
         <div>
           <div className="flex items-center gap-2">
@@ -93,7 +91,6 @@ export default function VisitCard({ visit, onDelete }) {
           <p className="text-xs text-slate-400 mt-0.5">{dateStr}</p>
         </div>
 
-        {/* Top Right Action Buttons: Separate PDF & Delete */}
         <div className="flex items-center gap-2">
           <button 
             type="button"
@@ -117,7 +114,6 @@ export default function VisitCard({ visit, onDelete }) {
         </div>
       </div>
 
-      {/* Main Details Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 text-sm">
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase">IN TIME</p>
@@ -129,20 +125,19 @@ export default function VisitCard({ visit, onDelete }) {
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase">PAYOUT</p>
-          <p className="font-bold text-slate-800 mt-0.5">₹{payout}</p>
+          <p className="font-bold text-slate-800 mt-0.5">₹{displayPayout}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase">KEY TASK</p>
-          <p className="font-medium text-slate-700 mt-0.5 line-clamp-1">{keyTask}</p>
+          <p className="font-medium text-slate-700 mt-0.5 line-clamp-1">{displayTask}</p>
         </div>
       </div>
 
-      {/* Signature Preview */}
-      {visit.signature && (
+      {(visit.signature || raw.signature) && (
         <div className="pt-3 border-t border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase mb-2">CLIENT / MANAGER SIGNATURE</p>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 inline-block">
-            <img src={visit.signature} alt="Signature" className="h-12 object-contain" />
+            <img src={visit.signature || raw.signature} alt="Signature" className="h-12 object-contain" />
           </div>
         </div>
       )}
