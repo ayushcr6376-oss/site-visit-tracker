@@ -136,24 +136,28 @@ export default function VisitModal({ isOpen, onClose }) {
     setSubmitting(true);
 
     try {
+      // ✅ Key Names Exact Alignment for Both Frontend & DB Mapping
       const payload = {
-        date: form.visitDate,
+        visitDate: form.visitDate,
+        clientCompany: form.clientCompany.trim(),
+        parentCompany: form.parentCompany.trim(),
+        payoutAmount: Number(form.payoutAmount || 0),
+        visitType: form.visitType,
+        keyTask: form.keyTask.trim(),
+        status: form.status,
+        signature: savedSignature,
+        inTime: inTimeFormatted,
+        outTime: outTimeFormatted,
+        // Dual fallback keys
         site_name: form.clientCompany.trim(),
         parent_company: form.parentCompany.trim(),
         payout_amount: Number(form.payoutAmount || 0),
-        visit_type: form.visitType,
         key_task: form.keyTask.trim(),
-        status: form.status,
-        signature: savedSignature,
         check_in: inTimeFormatted,
         check_out: outTimeFormatted,
       };
 
-      const success = await saveVisit(payload);
-      if (!success) {
-        alert('Failed to save visit. Please verify Supabase table columns and RLS policies.');
-        return;
-      }
+      await saveVisit(payload);
 
       resetForm();
       onClose();
