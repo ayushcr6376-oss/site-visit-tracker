@@ -38,7 +38,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Session Check & Listener
+  // 1. Session Check & Realtime Auth Listener
   useEffect(() => {
     let mounted = true;
 
@@ -77,7 +77,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits (User Isolated)
+  // 2. Fetch Visits (User Isolated with Full Key Safety)
   const fetchVisits = async (userId) => {
     const currentUserId = userId || user?.id;
     if (!currentUserId) {
@@ -99,8 +99,9 @@ export function AppProvider({ children }) {
         const mapped = (data || []).map((row) => {
           const inTimeVal = row.in_time || row.inTime || row.check_in || '—';
           const outTimeVal = row.out_time || row.outTime || row.check_out || '—';
-          const rawTask = row.key_task || row.keyTask || row.purpose || '';
-          const rawPayout = row.payout_amount ?? row.payoutAmount ?? row.payout ?? 0;
+          const rawTask = row.key_task || row.keyTask || row.purpose || row.task || '';
+          const rawPayout = row.payout_amount !== undefined && row.payout_amount !== null ? row.payout_amount : 
+                            (row.payoutAmount !== undefined && row.payoutAmount !== null ? row.payoutAmount : (row.payout || 0));
 
           return {
             id: row.id,
@@ -130,13 +131,13 @@ export function AppProvider({ children }) {
   // 3. Add Visit with user_id attached
   const addVisit = async (visitData) => {
     try {
-      const activeUser = user || (await supabase.auth.getUser()).data.user;
+      const activeUser = user || (await supabase.auth.getUser()).data?.user;
       if (!activeUser) {
         throw new Error('User not logged in');
       }
 
       const taskVal = visitData.keyTask || visitData.key_task || visitData.purpose || '';
-      const payoutVal = Number(visitData.payoutAmount || visitData.payout_amount || 0);
+      const payoutVal = Number(visitData.payoutAmount || visitData.payout_amount || visitData.payout || 0);
       const inT = visitData.inTime || visitData.check_in || '—';
       const outT = visitData.outTime || visitData.check_out || '—';
 
@@ -198,25 +199,49 @@ export function AppProvider({ children }) {
     );
   }, [visits, searchQuery]);
 
-  // 6. Metrics & Summary Calculation
+  // 6. Metrics & Summary Calculation (All UI Variations Covered)
   const summary = useMemo(() => {
     const totalVisits = visits.length;
-    const totalPayout = visits.reduce((acc, curr) => acc + (curr.payoutAmount || 0), 0);
-    const totalHours = visits.reduce((acc, curr) => acc + (curr.durationHours || 0), 0);
-    const paidVisits = visits.filter((v) => String(v.status).toLowerCase() === 'paid' || String(v.status).toLowerCase() === 'completed').length;
-    const pendingVisits = visits.filter((v) => String(v.status).toLowerCase() === 'pending').length;
+    
+    // Total Payout / Billings Calculation
+    const totalAmount = visits.reduce((acc, curr) => {
+      const amt = Number(curr.payoutAmount || curr.payout_amount || curr.payout || 0);
+      return acc + (isNaN(amt) ? 0 : amt);
+    }, 0);
+
+    // Total Hours Logged Calculation
+    const totalHours = visits.reduce((acc, curr) => {
+      const hrs = Number(curr.durationHours || 0);
+      return acc + (isNaN(hrs) ? 0 : hrs);
+    }, 0);
+
+    const paidVisits = visits.filter((v) => 
+      String(v.status).toLowerCase() === 'paid' || String(v.status).toLowerCase() === 'completed'
+    ).length;
+
+    const pendingVisits = visits.filter((v) => 
+      String(v.status).toLowerCase() === 'pending'
+    ).length;
 
     return {
       totalVisits,
-      totalPayout,
-      totalBillings: totalPayout,
+      // Total Billings / Payout Variations
+      totalBillings: totalAmount,
+      totalBilling: totalAmount,
+      totalPayout: totalAmount,
+      totalEarnings: totalAmount,
+      billingAmount: totalAmount,
+      // Hours Variations
       totalHours: Number(totalHours.toFixed(1)),
+      totalHoursLogged: Number(totalHours.toFixed(1)),
+      hoursLogged: Number(totalHours.toFixed(1)),
+      // Status Counts
       paidVisits,
       pendingVisits,
     };
   }, [visits]);
 
-  // 7. Auth Helpers
+  // 7. Auth Functions
   const login = async (email, password) => {
     setAuthError('');
     if (!email || !password) {
