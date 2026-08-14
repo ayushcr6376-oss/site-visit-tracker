@@ -24,7 +24,7 @@ function calculateTimeDuration(inTimeStr, outTimeStr) {
     if (inMinutes === null || outMinutes === null) return 0;
 
     let diff = outMinutes - inMinutes;
-    if (diff < 0) diff += 24 * 60; // Overnight shift handle
+    if (diff < 0) diff += 24 * 60;
     return Number((diff / 60).toFixed(1));
   } catch {
     return 0;
@@ -38,7 +38,7 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Session Check & Realtime Auth Listener
+  // 1. Session Check & Auth Listener
   useEffect(() => {
     let mounted = true;
 
@@ -77,7 +77,7 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits (User Isolated with Full Key Safety)
+  // 2. Fetch Visits (User Isolated & Complete Mapping)
   const fetchVisits = async (userId) => {
     const currentUserId = userId || user?.id;
     if (!currentUserId) {
@@ -100,6 +100,8 @@ export function AppProvider({ children }) {
           const inTimeVal = row.in_time || row.inTime || row.check_in || '—';
           const outTimeVal = row.out_time || row.outTime || row.check_out || '—';
           const rawTask = row.key_task || row.keyTask || row.purpose || row.task || '';
+          
+          // Direct check on every possible payout field
           const rawPayout = row.payout_amount !== undefined && row.payout_amount !== null ? row.payout_amount : 
                             (row.payoutAmount !== undefined && row.payoutAmount !== null ? row.payoutAmount : (row.payout || 0));
 
@@ -128,13 +130,11 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit with user_id attached
+  // 3. Add Visit
   const addVisit = async (visitData) => {
     try {
       const activeUser = user || (await supabase.auth.getUser()).data?.user;
-      if (!activeUser) {
-        throw new Error('User not logged in');
-      }
+      if (!activeUser) throw new Error('User not logged in');
 
       const taskVal = visitData.keyTask || visitData.key_task || visitData.purpose || '';
       const payoutVal = Number(visitData.payoutAmount || visitData.payout_amount || visitData.payout || 0);
@@ -199,17 +199,17 @@ export function AppProvider({ children }) {
     );
   }, [visits, searchQuery]);
 
-  // 6. Metrics & Summary Calculation (All UI Variations Covered)
+  // 6. Summary Calculation with ALL Metrics Aliases
   const summary = useMemo(() => {
     const totalVisits = visits.length;
     
-    // Total Payout / Billings Calculation
+    // Exact Total Billings Calculation
     const totalAmount = visits.reduce((acc, curr) => {
-      const amt = Number(curr.payoutAmount || curr.payout_amount || curr.payout || 0);
+      const amt = Number(curr.payoutAmount || curr.payout_amount || 0);
       return acc + (isNaN(amt) ? 0 : amt);
     }, 0);
 
-    // Total Hours Logged Calculation
+    // Exact Total Hours Calculation
     const totalHours = visits.reduce((acc, curr) => {
       const hrs = Number(curr.durationHours || 0);
       return acc + (isNaN(hrs) ? 0 : hrs);
@@ -225,17 +225,12 @@ export function AppProvider({ children }) {
 
     return {
       totalVisits,
-      // Total Billings / Payout Variations
       totalBillings: totalAmount,
       totalBilling: totalAmount,
       totalPayout: totalAmount,
       totalEarnings: totalAmount,
-      billingAmount: totalAmount,
-      // Hours Variations
       totalHours: Number(totalHours.toFixed(1)),
       totalHoursLogged: Number(totalHours.toFixed(1)),
-      hoursLogged: Number(totalHours.toFixed(1)),
-      // Status Counts
       paidVisits,
       pendingVisits,
     };

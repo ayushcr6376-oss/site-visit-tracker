@@ -3,25 +3,15 @@ import { Trash2, Download } from 'lucide-react';
 import jsPDF from 'jspdf';
 
 export default function VisitCard({ visit, onDelete }) {
-  const raw = visit.rawRow || {};
-
-  // Extract task checking all sources
-  const taskText = visit.keyTask || raw.key_task || raw.keyTask || raw.purpose || raw.task || '';
-  const displayTask = taskText.trim() !== '' ? taskText : 'No tasks logged.';
-
-  // Extract payout checking all sources
-  const rawPayoutNum = visit.payoutAmount !== undefined && visit.payoutAmount !== 0 ? visit.payoutAmount :
-                       (raw.payout_amount !== undefined ? raw.payout_amount :
-                       (raw.payoutAmount !== undefined ? raw.payoutAmount : raw.payout));
-  const displayPayout = Number(rawPayoutNum || 0);
-
-  const siteName = visit.clientCompany || raw.client_company || raw.site_name || 'Industrial Site';
-  const parentComp = visit.parentCompany || raw.parent_company || raw.manager_name || '';
-  const dateStr = visit.visitDate || raw.visit_date || (visit.createdAt ? visit.createdAt.split('T')[0] : 'N/A');
+  const siteName = visit.clientCompany || visit.site_name || 'Industrial Site';
+  const parentComp = visit.parentCompany || visit.parent_company || '';
+  const dateStr = visit.visitDate || visit.visit_date || (visit.createdAt ? visit.createdAt.split('T')[0] : 'N/A');
   
-  const inTime = visit.inTime || raw.in_time || raw.check_in || '—';
-  const outTime = visit.outTime || raw.out_time || raw.check_out || '—';
-  const status = visit.status || raw.status || 'pending';
+  const inTime = visit.inTime || visit.check_in || '—';
+  const outTime = visit.outTime || visit.check_out || '—';
+  const keyTask = visit.keyTask || visit.key_task || 'No tasks logged.';
+  const payout = Number(visit.payoutAmount || visit.payout_amount || 0);
+  const status = visit.status || 'pending';
 
   const handleDownloadSinglePDF = () => {
     try {
@@ -52,7 +42,7 @@ export default function VisitCard({ visit, onDelete }) {
       addRow('Status', status.toUpperCase());
       addRow('IN Time', inTime);
       addRow('OUT Time', outTime);
-      addRow('Payout Amount', `INR ${displayPayout.toLocaleString('en-IN')}`);
+      addRow('Payout Amount', `INR ${payout.toLocaleString('en-IN')}`);
 
       currentY += 5;
       doc.setFillColor(248, 250, 252);
@@ -60,14 +50,14 @@ export default function VisitCard({ visit, onDelete }) {
       doc.setFont('helvetica', 'bold');
       doc.text('Key Task Executed:', 20, currentY + 10);
       doc.setFont('helvetica', 'normal');
-      const splitTasks = doc.splitTextToSize(displayTask, 170);
+      const splitTasks = doc.splitTextToSize(keyTask, 170);
       doc.text(splitTasks, 20, currentY + 22);
 
-      if (visit.signature || raw.signature) {
+      if (visit.signature) {
         currentY += 50;
         doc.setFont('helvetica', 'bold');
         doc.text('Client / Manager Signature:', 15, currentY);
-        doc.addImage(visit.signature || raw.signature, 'PNG', 15, currentY + 5, 50, 22);
+        doc.addImage(visit.signature, 'PNG', 15, currentY + 5, 50, 22);
       }
 
       doc.save(`Visit_Report_${siteName.replace(/\s+/g, '_')}_${dateStr}.pdf`);
@@ -84,7 +74,11 @@ export default function VisitCard({ visit, onDelete }) {
           <div className="flex items-center gap-2">
             <h3 className="text-lg font-bold text-slate-800">{siteName}</h3>
             {parentComp && <span className="text-sm text-slate-500">({parentComp})</span>}
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+              status.toLowerCase() === 'completed' || status.toLowerCase() === 'paid'
+                ? 'bg-emerald-100 text-emerald-700'
+                : 'bg-amber-100 text-amber-700'
+            }`}>
               • {status}
             </span>
           </div>
@@ -125,19 +119,19 @@ export default function VisitCard({ visit, onDelete }) {
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase">PAYOUT</p>
-          <p className="font-bold text-slate-800 mt-0.5">₹{displayPayout}</p>
+          <p className="font-bold text-slate-800 mt-0.5">₹{payout}</p>
         </div>
         <div>
           <p className="text-xs font-semibold text-slate-400 uppercase">KEY TASK</p>
-          <p className="font-medium text-slate-700 mt-0.5 line-clamp-1">{displayTask}</p>
+          <p className="font-medium text-slate-700 mt-0.5 line-clamp-1">{keyTask}</p>
         </div>
       </div>
 
-      {(visit.signature || raw.signature) && (
+      {visit.signature && (
         <div className="pt-3 border-t border-slate-100">
           <p className="text-xs font-semibold text-slate-400 uppercase mb-2">CLIENT / MANAGER SIGNATURE</p>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 inline-block">
-            <img src={visit.signature || raw.signature} alt="Signature" className="h-12 object-contain" />
+            <img src={visit.signature} alt="Signature" className="h-12 object-contain" />
           </div>
         </div>
       )}
