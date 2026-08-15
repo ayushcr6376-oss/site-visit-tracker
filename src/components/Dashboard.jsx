@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import VisitCard from './VisitCard';
 import VisitModal from './VisitModal';
-import SettingsModal from './SettingsModal';
+import SettingView from './SettingView';
 import { Briefcase, Clock, DollarSign, CheckCircle2, Plus, Search, Settings, User, Sparkles } from 'lucide-react';
 
 export default function Dashboard() {
@@ -161,7 +161,7 @@ export default function Dashboard() {
 
       {/* 5. Modals */}
       <VisitModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingView isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
     </div>
   );
 }
