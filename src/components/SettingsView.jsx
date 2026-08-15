@@ -26,7 +26,7 @@ const DESIGNATIONS = [
   'Channel Partner Specialist'
 ];
 
-export default function SettingsModal({ isOpen, onClose }) {
+export default function SettingsView({ isOpen, onClose }) {
   const { user, userProfile, updateProfile } = useApp();
 
   const [fullName, setFullName] = useState('');
