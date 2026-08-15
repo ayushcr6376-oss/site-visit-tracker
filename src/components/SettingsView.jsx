@@ -1,164 +1,227 @@
-import React, { useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../utils/auth';
+import { User, Briefcase, Camera, Sparkles, X, Check } from 'lucide-react';
 
-export default function SettingsView({ setActiveTab }) {
-  const { t, i18n } = useTranslation();
-  const { user, updateProfileAvatar, logout } = useApp();
-  const [uploading, setUploading] = useState(false);
+const DESIGNATIONS = [
+  // --- Field & Site Roles ---
+  'Site Engineer',
+  'Field Service Specialist',
+  'Maintenance Supervisor',
+  'Safety Officer',
+  'Instrumentation Engineer',
+  'Electrical Consultant',
+  'Operations Manager',
+  'HVAC Technician',
+  'Contractor / Freelancer',
 
-  const isHindi = i18n.language && i18n.language.startsWith('hi');
+  // --- Sales & Business Development Roles ---
+  'Sales Executive',
+  'Field Sales Officer (FSO)',
+  'Key Account Manager (KAM)',
+  'Business Development Executive (BDE)',
+  'Business Development Manager (BDM)',
+  'Technical Sales Engineer',
+  'Area Sales Manager (ASM)',
+  'Regional Sales Manager (RSM)',
+  'Channel Partner Specialist'
+];
 
-  const avatarUrl =
-    user?.avatar_url ||
-    user?.user_metadata?.avatar_url ||
-    'https://via.placeholder.com/150?text=User';
+export default function SettingsModal({ isOpen, onClose }) {
+  const { user, userProfile, updateProfile } = useApp();
 
-  const changeLanguage = (lang) => {
-    i18n.changeLanguage(lang);
-  };
+  const [fullName, setFullName] = useState('');
+  const [designation, setDesignation] = useState(DESIGNATIONS[0]);
+  const [avatar, setAvatar] = useState(null);
+  const [appMode, setAppMode] = useState('individual');
+  const [savedSuccess, setSavedSuccess] = useState(false);
 
-  const handleAvatarUpload = async (event) => {
-    try {
-      setUploading(true);
-      const file = event.target.files[0];
-      if (!file) return;
+  useEffect(() => {
+    if (userProfile) {
+      setFullName(userProfile.fullName || user?.name || '');
+      setDesignation(userProfile.designation || DESIGNATIONS[0]);
+      setAvatar(userProfile.avatar || null);
+      setAppMode(userProfile.appMode || 'individual');
+    }
+  }, [userProfile, user, isOpen]);
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user?.id || 'user'}_${Date.now()}.${fileExt}`;
-      const filePath = `profiles/${fileName}`;
-
-      // 1. Supabase Storage Bucket 'avatars' mein upload karo
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(filePath, file, { upsert: true });
-
-      if (uploadError) throw uploadError;
-
-      // 2. Public URL nikalo
-      const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-      const publicUrl = data.publicUrl;
-
-      // 3. User profile metadata update karo
-      const res = await updateProfileAvatar(publicUrl);
-      if (res.success) {
-        alert(isHindi ? 'प्रोफ़ाइल फोटो अपडेट हो गई!' : 'Profile photo updated successfully!');
-      } else {
-        alert(res.error || 'Failed to update user profile');
-      }
-    } catch (error) {
-      alert(error.message || 'Photo upload failed');
-    } finally {
-      setUploading(false);
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setAvatar(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
+  const handleSave = (e) => {
+    e.preventDefault();
+    updateProfile({
+      fullName: fullName.trim(),
+      designation,
+      avatar,
+      appMode
+    });
+    setSavedSuccess(true);
+    setTimeout(() => {
+      setSavedSuccess(false);
+      onClose();
+    }, 800);
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <div className="bg-white rounded-xl shadow border border-slate-200 p-6 space-y-8 max-w-3xl mx-auto">
-      <div className="flex justify-between items-center border-b pb-4">
-        <h2 className="text-xl font-bold text-slate-900">
-          ⚙️ {isHindi ? 'खाता और सेटिंग्स' : 'Account & Settings'}
-        </h2>
-        <button
-          onClick={() => setActiveTab('home')}
-          className="text-sm font-semibold text-blue-600 hover:underline"
-        >
-          ← {isHindi ? 'होम पर वापस जाएं' : 'Back to Home'}
-        </button>
-      </div>
-
-      {/* 📸 PROFILE PHOTO SECTION */}
-      <div className="space-y-4">
-        <h3 className="text-md font-semibold text-slate-700">
-          📸 {isHindi ? 'प्रोफ़ाइल फोटो (Profile Picture)' : 'Profile Picture'}
-        </h3>
-        <div className="flex items-center gap-6">
-          <img
-            src={avatarUrl}
-            alt="Profile Avatar"
-            className="w-24 h-24 rounded-full object-cover border-2 border-blue-600 shadow-sm"
-          />
-          <div className="space-y-2">
-            <label className="cursor-pointer bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all inline-block">
-              {uploading
-                ? isHindi
-                  ? 'अपलोड हो रहा है...'
-                  : 'Uploading...'
-                : isHindi
-                ? 'फोटो बदलें'
-                : 'Upload New Photo'}
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarUpload}
-                disabled={uploading}
-                className="hidden"
-              />
-            </label>
-            <p className="text-xs text-slate-500">JPG, PNG allowed (Max 5MB)</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <button 
+        type="button"
+        aria-label="Close modal overlay"
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm border-none cursor-default" 
+        onClick={onClose} 
+      />
+      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden animate-slide-up">
+        <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Account & Preferences</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Manage your identity and workspace modes</p>
           </div>
-        </div>
-      </div>
-
-      {/* 🌐 LANGUAGE SELECTION */}
-      <div className="border-t pt-6 space-y-3">
-        <h3 className="text-md font-semibold text-slate-700">
-          🌐 {isHindi ? 'भाषा चुनें (Select Language)' : 'App Language'}
-        </h3>
-        <div className="flex gap-4">
-          <button
-            onClick={() => changeLanguage('en')}
-            className={`px-5 py-2.5 rounded-lg font-medium text-sm border transition-all ${
-              !isHindi
-                ? 'bg-blue-600 text-white border-blue-600 shadow'
-                : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-            }`}
+          <button 
+            type="button"
+            onClick={onClose} 
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
           >
-            🇬🇧 English
-          </button>
-          <button
-            onClick={() => changeLanguage('hi')}
-            className={`px-5 py-2.5 rounded-lg font-medium text-sm border transition-all ${
-              isHindi
-                ? 'bg-blue-600 text-white border-blue-600 shadow'
-                : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
-            }`}
-          >
-            🇮🇳 हिंदी (Hindi)
+            <X size={16} />
           </button>
         </div>
-      </div>
 
-      {/* 👤 ACCOUNT DETAILS */}
-      <div className="border-t pt-6 space-y-3">
-        <h3 className="text-md font-semibold text-slate-700">
-          👤 {isHindi ? 'खाता जानकारी' : 'Account Details'}
-        </h3>
-        <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-1 text-sm">
-          <p>
-            <strong>Name:</strong> {user?.name || user?.user_metadata?.name || 'User'}
-          </p>
-          <p>
-            <strong>Email:</strong> {user?.email || 'N/A'}
-          </p>
-          <p>
-            <strong>Role:</strong> Site Engineer / Manager
-          </p>
-        </div>
-      </div>
+        <form onSubmit={handleSave} className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
+          {/* Avatar Section */}
+          <div className="flex items-center gap-5">
+            <div className="relative">
+              <div className="w-20 h-20 rounded-2xl bg-blue-50 border-2 border-slate-100 flex items-center justify-center overflow-hidden">
+                {avatar ? (
+                  <img src={avatar} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <User size={36} className="text-blue-500" />
+                )}
+              </div>
+              <label className="absolute -bottom-2 -right-2 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl shadow-md cursor-pointer transition-all">
+                <Camera size={14} />
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              </label>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">Profile Picture</h4>
+              <p className="text-xs text-slate-400 mt-0.5">JPG or PNG (Recommended 1:1 ratio)</p>
+            </div>
+          </div>
 
-      {/* 🚪 LOGOUT */}
-      {logout && (
-        <div className="border-t pt-6">
-          <button
-            onClick={logout}
-            className="bg-red-500 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-red-600 transition-all"
-          >
-            🚪 {isHindi ? 'लॉगआउट करें' : 'Logout'}
-          </button>
-        </div>
-      )}
+          {/* Name & Designation */}
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Full Name</label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="e.g. Rahul Sharma"
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Designation / Role</label>
+              <select
+                value={designation}
+                onChange={(e) => setDesignation(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm bg-white focus:outline-none focus:border-blue-500"
+              >
+                <optgroup label="Sales & Business Development">
+                  <option value="Sales Executive">Sales Executive</option>
+                  <option value="Field Sales Officer (FSO)">Field Sales Officer (FSO)</option>
+                  <option value="Key Account Manager (KAM)">Key Account Manager (KAM)</option>
+                  <option value="Business Development Executive (BDE)">Business Development Executive (BDE)</option>
+                  <option value="Business Development Manager (BDM)">Business Development Manager (BDM)</option>
+                  <option value="Technical Sales Engineer">Technical Sales Engineer</option>
+                  <option value="Area Sales Manager (ASM)">Area Sales Manager (ASM)</option>
+                  <option value="Regional Sales Manager (RSM)">Regional Sales Manager (RSM)</option>
+                  <option value="Channel Partner Specialist">Channel Partner Specialist</option>
+                </optgroup>
+                <optgroup label="Field & Engineering Operations">
+                  <option value="Site Engineer">Site Engineer</option>
+                  <option value="Field Service Specialist">Field Service Specialist</option>
+                  <option value="Maintenance Supervisor">Maintenance Supervisor</option>
+                  <option value="Safety Officer">Safety Officer</option>
+                  <option value="Instrumentation Engineer">Instrumentation Engineer</option>
+                  <option value="Electrical Consultant">Electrical Consultant</option>
+                  <option value="Operations Manager">Operations Manager</option>
+                  <option value="HVAC Technician">HVAC Technician</option>
+                  <option value="Contractor / Freelancer">Contractor / Freelancer</option>
+                </optgroup>
+              </select>
+            </div>
+          </div>
+
+          {/* Mode Selector */}
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-3">Workspace Mode</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div 
+                onClick={() => setAppMode('individual')}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                  appMode === 'individual' 
+                    ? 'border-blue-600 bg-blue-50/50 shadow-sm' 
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="p-2 bg-blue-100 text-blue-700 rounded-xl">
+                    <User size={18} />
+                  </div>
+                  {appMode === 'individual' && <Check size={16} className="text-blue-600 font-bold" />}
+                </div>
+                <h5 className="text-sm font-bold text-slate-800">Individual Mode</h5>
+                <p className="text-xs text-slate-500 mt-1">Single user tracker, direct log & PDF reports.</p>
+              </div>
+
+              <div 
+                onClick={() => setAppMode('business')}
+                className={`p-4 rounded-2xl border-2 cursor-pointer transition-all relative ${
+                  appMode === 'business' 
+                    ? 'border-indigo-600 bg-indigo-50/50 shadow-sm' 
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <span className="absolute top-3 right-3 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xs">
+                  <Sparkles size={10} /> PRO
+                </span>
+                <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl mb-2 w-fit">
+                  <Briefcase size={18} />
+                </div>
+                <h5 className="text-sm font-bold text-slate-800">Business Mode</h5>
+                <p className="text-xs text-slate-500 mt-1">Team management, multi-user logs & GST billings.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-bold text-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
+            >
+              {savedSuccess ? <><Check size={16} /> Saved!</> : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

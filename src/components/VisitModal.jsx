@@ -3,6 +3,24 @@ import SignatureCanvas from 'react-signature-canvas';
 import { useApp } from '../context/AppContext';
 import { VISIT_STATUS } from '../utils/constants';
 
+const VISIT_TYPES = [
+  // --- Sales & Client Visits ---
+  'New Client Pitch / Discovery',
+  'Product Demo & Presentation',
+  'Quotation & Contract Negotiation',
+  'Relationship & Account Review',
+  'Payment & Billing Follow-up',
+  
+  // --- Site & Industrial Operations ---
+  'Site Visit',
+  'Breakdown / Repair',
+  'Preventive Maintenance',
+  'Installation & Commissioning',
+  'Calibration & Testing',
+  'Safety Audit & Inspection',
+  'Emergency Callout'
+];
+
 const EMPTY_FORM = {
   visitDate: '',
   inHour: '09',
@@ -14,7 +32,7 @@ const EMPTY_FORM = {
   clientCompany: '',
   parentCompany: '',
   payoutAmount: '',
-  visitType: 'Site Visit',
+  visitType: VISIT_TYPES[0],
   keyTask: '',
   status: VISIT_STATUS.PENDING,
 };
@@ -102,18 +120,10 @@ export default function VisitModal({ isOpen, onClose }) {
   const validateForm = () => {
     const nextErrors = {};
 
-    if (!form.visitDate) {
-      nextErrors.visitDate = 'Date of visit is required.';
-    }
-    if (!form.clientCompany?.trim()) {
-      nextErrors.clientCompany = 'Client company name is required.';
-    }
-    if (!form.keyTask?.trim()) {
-      nextErrors.keyTask = 'Key task performed is required.';
-    }
-    if (!savedSignature) {
-      nextErrors.signature = 'Save the signature before submitting.';
-    }
+    if (!form.visitDate) nextErrors.visitDate = 'Date of visit is required.';
+    if (!form.clientCompany?.trim()) nextErrors.clientCompany = 'Client company name is required.';
+    if (!form.keyTask?.trim()) nextErrors.keyTask = 'Key task performed is required.';
+    if (!savedSignature) nextErrors.signature = 'Save the signature before submitting.';
 
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -136,7 +146,6 @@ export default function VisitModal({ isOpen, onClose }) {
     setSubmitting(true);
 
     try {
-      // ✅ Key Names Exact Alignment for Both Frontend & DB Mapping
       const payload = {
         visitDate: form.visitDate,
         clientCompany: form.clientCompany.trim(),
@@ -148,7 +157,6 @@ export default function VisitModal({ isOpen, onClose }) {
         signature: savedSignature,
         inTime: inTimeFormatted,
         outTime: outTimeFormatted,
-        // Dual fallback keys
         site_name: form.clientCompany.trim(),
         parent_company: form.parentCompany.trim(),
         payout_amount: Number(form.payoutAmount || 0),
@@ -158,7 +166,6 @@ export default function VisitModal({ isOpen, onClose }) {
       };
 
       await saveVisit(payload);
-
       resetForm();
       onClose();
     } catch (err) {
@@ -217,7 +224,7 @@ export default function VisitModal({ isOpen, onClose }) {
 
           <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-4">
             <span className="block text-xs font-semibold text-slate-700 uppercase tracking-wide">
-              Site Work Timings
+              Site / Meeting Timings
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -229,9 +236,7 @@ export default function VisitModal({ isOpen, onClose }) {
                     className="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"
                   >
                     {HOURS_OPTIONS.map((h) => (
-                      <option key={`in-h-${h}`} value={h}>
-                        {h}
-                      </option>
+                      <option key={`in-h-${h}`} value={h}>{h}</option>
                     ))}
                   </select>
                   <select
@@ -240,9 +245,7 @@ export default function VisitModal({ isOpen, onClose }) {
                     className="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"
                   >
                     {MINUTES_OPTIONS.map((m) => (
-                      <option key={`in-m-${m}`} value={m}>
-                        {m}
-                      </option>
+                      <option key={`in-m-${m}`} value={m}>{m}</option>
                     ))}
                   </select>
                   <select
@@ -264,9 +267,7 @@ export default function VisitModal({ isOpen, onClose }) {
                     className="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"
                   >
                     {HOURS_OPTIONS.map((h) => (
-                      <option key={`out-h-${h}`} value={h}>
-                        {h}
-                      </option>
+                      <option key={`out-h-${h}`} value={h}>{h}</option>
                     ))}
                   </select>
                   <select
@@ -275,9 +276,7 @@ export default function VisitModal({ isOpen, onClose }) {
                     className="flex-1 px-2 py-2 rounded-xl border bg-white text-sm"
                   >
                     {MINUTES_OPTIONS.map((m) => (
-                      <option key={`out-m-${m}`} value={m}>
-                        {m}
-                      </option>
+                      <option key={`out-m-${m}`} value={m}>{m}</option>
                     ))}
                   </select>
                   <select
@@ -296,7 +295,7 @@ export default function VisitModal({ isOpen, onClose }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-                Client Company
+                Client / Company Name
               </label>
               <input
                 type="text"
@@ -305,7 +304,7 @@ export default function VisitModal({ isOpen, onClose }) {
                 className={`w-full px-4 py-3 rounded-xl border text-sm ${
                   errors.clientCompany ? 'border-red-400' : 'border-slate-200'
                 }`}
-                placeholder="Client Name"
+                placeholder="e.g. Tata Steel / Reliance"
               />
               {errors.clientCompany && (
                 <p className="mt-1 text-xs text-red-500 font-medium">{errors.clientCompany}</p>
@@ -320,7 +319,7 @@ export default function VisitModal({ isOpen, onClose }) {
                 value={form.parentCompany}
                 onChange={(e) => updateField('parentCompany', e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm"
-                placeholder="Vendor Name"
+                placeholder="e.g. Siemens / ABB"
               />
             </div>
           </div>
@@ -328,7 +327,7 @@ export default function VisitModal({ isOpen, onClose }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div>
               <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-                Visit Payout (₹)
+                Visit Payout / Commission (₹)
               </label>
               <input
                 type="number"
@@ -348,16 +347,29 @@ export default function VisitModal({ isOpen, onClose }) {
                 onChange={(e) => updateField('visitType', e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm bg-white"
               >
-                <option value="Site Visit">Site Visit</option>
-                <option value="Meeting">Meeting</option>
-                <option value="Maintenance">Maintenance</option>
+                <optgroup label="Sales & Business Deals">
+                  <option value="New Client Pitch / Discovery">New Client Pitch / Discovery</option>
+                  <option value="Product Demo & Presentation">Product Demo & Presentation</option>
+                  <option value="Quotation & Contract Negotiation">Quotation & Contract Negotiation</option>
+                  <option value="Relationship & Account Review">Relationship & Account Review</option>
+                  <option value="Payment & Billing Follow-up">Payment & Billing Follow-up</option>
+                </optgroup>
+                <optgroup label="Field Operations & Technical">
+                  <option value="Site Visit">Site Visit</option>
+                  <option value="Breakdown / Repair">Breakdown / Repair</option>
+                  <option value="Preventive Maintenance">Preventive Maintenance</option>
+                  <option value="Installation & Commissioning">Installation & Commissioning</option>
+                  <option value="Calibration & Testing">Calibration & Testing</option>
+                  <option value="Safety Audit & Inspection">Safety Audit & Inspection</option>
+                  <option value="Emergency Callout">Emergency Callout</option>
+                </optgroup>
               </select>
             </div>
           </div>
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-2">
-              Key Task Performed
+              Key Task / Agenda Discussed
             </label>
             <textarea
               rows={3}
@@ -366,7 +378,7 @@ export default function VisitModal({ isOpen, onClose }) {
               className={`w-full px-4 py-3 rounded-xl border text-sm ${
                 errors.keyTask ? 'border-red-400' : 'border-slate-200'
               }`}
-              placeholder="What work was done?"
+              placeholder="Summary of meeting, technical observations or deals made..."
             />
             {errors.keyTask && (
               <p className="mt-1 text-xs text-red-500 font-medium">{errors.keyTask}</p>
@@ -406,7 +418,7 @@ export default function VisitModal({ isOpen, onClose }) {
           <div>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
-                Signature
+                Client / Supervisor Signature
               </span>
               {signatureSavedFlag && (
                 <span className="text-xs text-emerald-600 font-bold">✓ Saved</span>

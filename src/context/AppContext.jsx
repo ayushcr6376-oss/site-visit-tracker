@@ -4,7 +4,6 @@ import { signInWithEmail, signUpWithEmail, mapSessionToUser } from '../utils/aut
 
 const AppContext = createContext();
 
-// Helper to calculate hours between formatted times (e.g. "09:00 AM" to "06:00 PM")
 function calculateTimeDuration(inTimeStr, outTimeStr) {
   if (!inTimeStr || !outTimeStr || inTimeStr === '—' || outTimeStr === '—') return 0;
   try {
@@ -33,12 +32,29 @@ function calculateTimeDuration(inTimeStr, outTimeStr) {
 
 export function AppProvider({ children }) {
   const [user, setUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(() => {
+    const cached = localStorage.getItem('sitewatch_user_profile');
+    return cached ? JSON.parse(cached) : {
+      fullName: '',
+      designation: 'Site Engineer',
+      avatar: null,
+      appMode: 'individual'
+    };
+  });
+
   const [visits, setVisits] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState('');
 
-  // 1. Session Check & Auth Listener
+  const updateProfile = (profileData) => {
+    setUserProfile((prev) => {
+      const updated = { ...prev, ...profileData };
+      localStorage.setItem('sitewatch_user_profile', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -77,7 +93,6 @@ export function AppProvider({ children }) {
     };
   }, []);
 
-  // 2. Fetch Visits (User Isolated & Complete Mapping)
   const fetchVisits = async (userId) => {
     const currentUserId = userId || user?.id;
     if (!currentUserId) {
@@ -100,8 +115,6 @@ export function AppProvider({ children }) {
           const inTimeVal = row.in_time || row.inTime || row.check_in || '—';
           const outTimeVal = row.out_time || row.outTime || row.check_out || '—';
           const rawTask = row.key_task || row.keyTask || row.purpose || row.task || '';
-          
-          // Direct check on every possible payout field
           const rawPayout = row.payout_amount !== undefined && row.payout_amount !== null ? row.payout_amount : 
                             (row.payoutAmount !== undefined && row.payoutAmount !== null ? row.payoutAmount : (row.payout || 0));
 
@@ -130,7 +143,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 3. Add Visit
   const addVisit = async (visitData) => {
     try {
       const activeUser = user || (await supabase.auth.getUser()).data?.user;
@@ -162,11 +174,7 @@ export function AppProvider({ children }) {
       };
 
       const { error } = await supabase.from('site_visits').insert([newEntry]);
-
-      if (error) {
-        console.error('Error adding site_visit:', error.message);
-        throw error;
-      }
+      if (error) throw error;
 
       await fetchVisits(activeUser.id);
       return { success: true };
@@ -176,7 +184,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 4. Delete Visit
   const deleteVisit = async (visitId) => {
     try {
       const { error } = await supabase.from('site_visits').delete().eq('id', visitId);
@@ -187,7 +194,6 @@ export function AppProvider({ children }) {
     }
   };
 
-  // 5. Search Filter
   const filteredVisits = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return visits;
@@ -199,17 +205,13 @@ export function AppProvider({ children }) {
     );
   }, [visits, searchQuery]);
 
-  // 6. Summary Calculation with ALL Metrics Aliases
   const summary = useMemo(() => {
     const totalVisits = visits.length;
-    
-    // Exact Total Billings Calculation
     const totalAmount = visits.reduce((acc, curr) => {
       const amt = Number(curr.payoutAmount || curr.payout_amount || 0);
       return acc + (isNaN(amt) ? 0 : amt);
     }, 0);
 
-    // Exact Total Hours Calculation
     const totalHours = visits.reduce((acc, curr) => {
       const hrs = Number(curr.durationHours || 0);
       return acc + (isNaN(hrs) ? 0 : hrs);
@@ -236,7 +238,6 @@ export function AppProvider({ children }) {
     };
   }, [visits]);
 
-  // 7. Auth Functions
   const login = async (email, password) => {
     setAuthError('');
     if (!email || !password) {
@@ -278,6 +279,8 @@ export function AppProvider({ children }) {
     <AppContext.Provider
       value={{
         user,
+        userProfile,
+        updateProfile,
         visits,
         filteredVisits,
         summary,
