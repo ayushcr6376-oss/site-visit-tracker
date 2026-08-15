@@ -51,16 +51,17 @@ export default function Dashboard() {
       {/* 1. Header Profile & Settings Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
         <div className="flex items-center gap-4">
-          <div className="w-13 h-13 rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg overflow-hidden shadow-sm">
+          {/* Fixed Avatar Container */}
+          <div className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-2xl bg-blue-600 text-white flex items-center justify-center font-bold text-lg overflow-hidden shadow-xs shrink-0 border border-slate-100">
             {userProfile?.avatar ? (
-              <img src={userProfile.avatar} alt="Profile" className="w-full h-full object-cover" />
+              <img src={userProfile.avatar} alt="Profile" className="w-full h-full object-cover rounded-2xl" />
             ) : (
-              <User size={24} />
+              <User size={22} />
             )}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-slate-800 tracking-tight">{displayName}</h1>
+              <h1 className="text-lg sm:text-xl font-black text-slate-800 tracking-tight">{displayName}</h1>
               {isBusiness && (
                 <span className="bg-indigo-100 text-indigo-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1">
                   <Sparkles size={10} /> Business Mode
@@ -76,6 +77,7 @@ export default function Dashboard() {
 
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
             title="Settings & Modes"
@@ -85,6 +87,7 @@ export default function Dashboard() {
           </button>
 
           <button
+            type="button"
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all whitespace-nowrap"
           >
@@ -145,6 +148,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center">
           <p className="text-slate-500 font-medium">No visits logged yet.</p>
           <button
+            type="button"
             onClick={() => setIsModalOpen(true)}
             className="mt-3 text-blue-600 font-bold text-sm hover:underline"
           >
